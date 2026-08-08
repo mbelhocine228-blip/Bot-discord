@@ -1,83 +1,100 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { OpenAI } = require('openai');
 const express = require('express');
 
+// إعداد خادم الويب ليبقي البوت يعمل 24/7
 const app = express();
-const port = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot is running!'));
-app.listen(port, () => console.log(`Server running on port ${port}`));
+const port = process.env.PORT || 10000;
+app.get('/', (req, res) => res.send('Bot is active and running!'));
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on port ${port}`);
+});
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// قائمة أخبار Racing Master للنشر التلقائي
 const newsList = [
-    "🏎️ تحديث جديد لـ Racing Master: إضافة سيارات أسطورية جديدة!",
-    "🛠️ صيانة دورية للسيرفرات تبدأ بعد ساعة، استعدوا!",
-    "🏆 انطلاق الموسم الجديد من السباقات التنافسية، ادخلوا للمنافسة!",
-    "🔥 تخفيضات خاصة على قطع تطوير المحركات في المتجر الآن.",
-    "📢 إعلان هام: تحسينات في نظام الفيزيائية والتحكم في السيارات."
+    "🏎️ تحديث جديد لـ Racing Master: إضافة سيارات أسطورية جديدة للمنافسة!",
+    "🛠️ صيانة دورية للسيرفرات لضمان أفضل أداء، استعدوا للعودة بقوة!",
+    "🏆 انطلاق الموسم الجديد من السباقات التنافسية، ادخلوا للمنافسة الآن!",
+    "🔥 تخفيضات خاصة على قطع تطوير المحركات في المتجر، لا تفوت الفرصة!",
+    "📢 إعلان هام: تحسينات جديدة في نظام الفيزيائية والتحكم في السيارات."
 ];
 
 let usedNews = new Set();
 
+// دالة النشر التلقائي كل 30 دقيقة
 function sendRacingNews(clientInstance) {
     const channel = clientInstance.channels.cache.get('1534368094888398978');
-    if (!channel) return false;
+    if (!channel) return;
     if (usedNews.size >= newsList.length) usedNews.clear();
     let news;
     do { news = newsList[Math.floor(Math.random() * newsList.length)]; } while (usedNews.has(news));
     usedNews.add(news);
     channel.send(news).catch(console.error);
-    return true;
 }
 
+// تعريف الأوامر المطلوبة فقط وتحديثها وحذف القديم
 const commands = [
-    new SlashCommandBuilder().setName('ai').setDescription('اسأل الذكاء الاصطناعي').addStringOption(o => o.setName('question').setDescription('سؤالك').setRequired(true)),
-    new SlashCommandBuilder().setName('help').setDescription('عرض قائمة الأوامر الشاملة'),
-    new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة البوت'),
-    new SlashCommandBuilder().setName('userinfo').setDescription('معلومات عن حسابك'),
-    new SlashCommandBuilder().setName('serverinfo').setDescription('معلومات عن السيرفر'),
-    new SlashCommandBuilder().setName('avatar').setDescription('صورة بروفيل العضو').addUserOption(o => o.setName('user').setDescription('العضو').setRequired(false)),
-    new SlashCommandBuilder().setName('say').setDescription('اجعل البوت يكرر رسالتك').addStringOption(o => o.setName('message').setDescription('الرسالة').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-    new SlashCommandBuilder().setName('testnews').setDescription('تجربة نشر خبر Racing Master فوراً').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder().setName('modstatus').setDescription('مراقبة حالة السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
-    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(o => o.setName('count').setDescription('العدد').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').addUserOption(o => o.setName('user').setDescription('العضو').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
-    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو').addUserOption(o => o.setName('user').setDescription('العضو').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+    new SlashCommandBuilder()
+        .setName('ai')
+        .setDescription('اسأل الذكاء الاصطناعي أي سؤال')
+        .addStringOption(o => o.setName('question').setDescription('سؤالك').setRequired(true)),
+    
+    new SlashCommandBuilder()
+        .setName('clear')
+        .setDescription('مسح عدد محدد من الرسائل')
+        .addIntegerOption(o => o.setName('count').setDescription('عدد الرسائل المراد مسحها').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 ].map(command => command.toJSON());
 
 client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log(`✅ Logged in as ${client.user.tag}!`);
+    
+    // تسجيل الأوامر الجديدة ومسح أي أوامر سابقة من الديسكورد
+    try {
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✅ تم تسجيل الأوامر الجديدة وحذف القديمة بنجاح.');
+    } catch (error) {
+        console.error('❌ خطأ أثناء تسجل الأوامر:', error);
+    }
+    
+    // تشغيل النشر التلقائي (كل 30 دقيقة)
     setInterval(() => { sendRacingNews(client); }, 30 * 60 * 1000);
 });
 
+// التعامل مع الأوامر المتاحة
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
-    const { commandName } = interaction;
 
-    if (commandName === 'ping') await interaction.reply(`Pong! ${client.ws.ping}ms`);
-    else if (commandName === 'help') {
-        const embed = new EmbedBuilder().setTitle('📌 قائمة الأوامر').setDescription('`/ai`, `/ping`, `/userinfo`, `/serverinfo`, `/avatar`, `/say`, `/testnews`, `/modstatus`, `/clear`, `/kick`, `/ban`');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-    }
-    else if (commandName === 'testnews') {
-        const sent = sendRacingNews(client);
-        await interaction.reply({ content: sent ? '✅ تم النشر!' : '❌ فشل النشر.', ephemeral: true });
-    }
-    else if (commandName === 'modstatus') await interaction.reply({ content: `🛡️ السيرفر: ${interaction.guild.name}\n👥 الأعضاء: ${interaction.guild.memberCount}\n✅ الحالة: آمن`, ephemeral: true });
-    else if (commandName === 'say') { await interaction.channel.send(interaction.options.getString('message')); await interaction.reply({ content: 'تم الإرسال!', ephemeral: true }); }
-    else if (commandName === 'userinfo') await interaction.reply({ content: `👤 اسم المستخدم: ${interaction.user.tag}\n🆔 الآيدي: ${interaction.user.id}`, ephemeral: true });
-    else if (commandName === 'serverinfo') await interaction.reply({ content: `🏰 السيرفر: ${interaction.guild.name}\n👥 الأعضاء: ${interaction.guild.memberCount}`, ephemeral: true });
-    else if (commandName === 'avatar') await interaction.reply({ content: interaction.options.getUser('user') ? interaction.options.getUser('user').displayAvatarURL() : interaction.user.displayAvatarURL() });
-    else if (commandName === 'clear') { await interaction.channel.bulkDelete(interaction.options.getInteger('count'), true); await interaction.reply({ content: '🧹 تم مسح الرسائل!', ephemeral: true }); }
-    else if (commandName === 'kick') { await interaction.options.getMember('user').kick(); await interaction.reply({ content: '👢 تم الطرد.', ephemeral: true }); }
-    else if (commandName === 'ban') { await interaction.options.getMember('user').ban(); await interaction.reply({ content: '🔨 تم الحظر.', ephemeral: true }); }
-    else if (commandName === 'ai') {
-        await interaction.deferReply();
-        const completion = await openai.chat.completions.create({ model: 'gpt-3.5-turbo', messages: [{ role: 'user', content: interaction.options.getString('question') }] });
-        await interaction.editReply(completion.choices[0].message.content);
+    try {
+        if (interaction.commandName === 'ai') {
+            await interaction.deferReply();
+            const completion = await openai.chat.completions.create({
+                model: 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: interaction.options.getString('question') }]
+            });
+            await interaction.editReply(completion.choices[0].message.content);
+        } 
+        else if (interaction.commandName === 'clear') {
+            const count = interaction.options.getInteger('count');
+            if (count < 1 || count > 100) {
+                return interaction.reply({ content: '❌ يرجى اختيار عدد بين 1 و 100.', ephemeral: true });
+            }
+            
+            await interaction.deferReply({ ephemeral: true });
+            await interaction.channel.bulkDelete(count, true);
+            await interaction.editReply(`🧹 تم مسح **${count}** رسالة بنجاح!`);
+        }
+    } catch (error) {
+        console.error(error);
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر.' }).catch(() => {});
+        } else {
+            await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر.', ephemeral: true }).catch(() => {});
+        }
     }
 });
 
