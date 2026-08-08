@@ -1,5 +1,5 @@
 {
-  "name": "bot-discord",
+  "name": "discord-bot",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -11,3 +11,4 @@
     "openai": "^4.0.0"
   }
 }
+
