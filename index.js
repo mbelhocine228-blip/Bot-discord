@@ -19,9 +19,9 @@ const client = new Client({
     ] 
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// مفتاح Gemini المباشر
+const genAI = new GoogleGenerativeAI("AQ.Ab8RN6LeaBRNDCNdQFL0vAIjuYFqh12AGVhYZClUKt2wP-sOVg");
 
-// متغير لمراقبة آخر وقت تم فيه نشر الأخبار تلقائياً
 let lastNewsTime = "لم يتم النشر بعد منذ تشغيل البوت";
 
 // تعريف جميع الأوامر
@@ -31,8 +31,12 @@ const commands = [
     new SlashCommandBuilder().setName('news-status').setDescription('مراقبة حالة النشر التلقائي للأخبار'),
     new SlashCommandBuilder()
         .setName('ai')
-        .setDescription('طرح سؤال على الذكاء الاصطناعي (Gemini)')
-        .addStringOption(option => option.setName('question').setDescription('اكتب سؤالك هنا').setRequired(true)),
+        .setDescription('طرح أي سؤال على الذكاء الاصطناعي')
+        .addStringOption(option => option.setName('question').setDescription('سؤالك العام').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('racing-master')
+        .setDescription('اسأل عن أسرار ونصائح لعبة Racing Master')
+        .addStringOption(option => option.setName('query').setDescription('سؤالك عن اللعبة').setRequired(true)),
     new SlashCommandBuilder()
         .setName('clear')
         .setDescription('مسح عدد معين من الرسائل')
@@ -68,7 +72,7 @@ client.once('ready', async () => {
         console.error(error);
     }
 
-    // جدول النشر التلقائي كل 20 دقيقة في قناتك المحددة
+    // جدول النشر التلقائي كل 20 دقيقة
     cron.schedule('*/20 * * * *', () => {
         const targetChannelId = '1534368094888398978'; 
         const channel = client.channels.cache.get(targetChannelId);
@@ -85,29 +89,43 @@ client.once('ready', async () => {
     });
 });
 
-// وظيفة التواصل مع Gemini (عامة وبدون قيود)
+// وظيفة الذكاء الاصطناعي العامة
 async function askGemini(promptText) {
     try {
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
-            systemInstruction: "أنت مساعد ذكي متعدد المهام. تجيب على أي سؤال يطرحه المستخدم باحترافية، دقة، وبدون قيود، باللغة العربية."
-        });
-        const result = await model.generateContent(promptText);
-        return result.response.text();
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent([
+            { text: "أنت مساعد ذكي متعدد المهام. تجيب على أي سؤال يطرحه المستخدم باحترافية ودقة باللغة العربية. السؤال هو: " + promptText }
+        ]);
+        const response = await result.response;
+        return response.text();
     } catch (error) {
-        console.error(error);
+        console.error("Gemini Error:", error);
         return "عذراً، حدث خطأ أثناء الاتصال بالذكاء الاصطناعي.";
     }
 }
 
-// التعامل مع الأوامر (Slash Commands)
+// وظيفة خاصة للعبة Racing Master
+async function askRacingMaster(promptText) {
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent([
+            { text: "أنت خبير ومحترف في لعبة السباقات الشهيرة Racing Master. قدم نصائح واستراتيجيات للإجابة على هذا السؤال باللغة العربية: " + promptText }
+        ]);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Racing Master AI Error:", error);
+        return "عذراً، حدث خطأ أثناء الاتصال بمدرب Racing Master.";
+    }
+}
+
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     const { commandName } = interaction;
 
     if (commandName === 'help') {
-        await interaction.reply({ content: '🛠️ **قائمة الأوامر:**\n`/ai` - سؤال الذكاء الاصطناعي\n`/news-status` - حالة النشر التلقائي\n`/clear` - مسح رسائل\n`/say` - إرسال رسالة\n`/kick` - طرد\n`/ban` - حظر\n`/unban` - فك حظر\n`/announce-now` - خبر فوري', ephemeral: true });
+        await interaction.reply({ content: '🛠️ **قائمة الأوامر:**\n`/ai` - سؤال عام للذكاء الاصطناعي\n`/racing-master` - نصائح لعبة Racing Master\n`/news-status` - حالة النشر التلقائي\n`/clear` - مسح رسائل\n`/say` - إرسال رسالة\n`/kick` - طرد\n`/ban` - حظر\n`/unban` - فك حظر', ephemeral: true });
     } 
     else if (commandName === 'status') {
         await interaction.reply({ content: '🟢 البوت يعمل بكفاءة ومربوط بـ Gemini 24/7!', ephemeral: true });
@@ -119,6 +137,12 @@ client.on('interactionCreate', async interaction => {
         await interaction.deferReply();
         const question = interaction.options.getString('question');
         const answer = await askGemini(question);
+        await interaction.editReply(answer);
+    }
+    else if (commandName === 'racing-master') {
+        await interaction.deferReply();
+        const query = interaction.options.getString('query');
+        const answer = await askRacingMaster(query);
         await interaction.editReply(answer);
     }
     else if (commandName === 'clear') {
@@ -173,7 +197,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// رد تلقائي عند الإشارة للبوت في أي رسالة عادية
+// رد تلقائي عند الإشارة للبوت
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
     if (message.mentions.has(client.user)) {
