@@ -20,7 +20,7 @@ const client = new Client({
     ] 
 });
 
-// قائمة بجميع الأوامر التي طلبناها
+// تعريف جميع الأوامر بشكل صحيح ودون أخطاء
 const commands = [
     new SlashCommandBuilder().setName('help').setDescription('عرض قائمة الأوامر المتاحة'),
     new SlashCommandBuilder().setName('status').setDescription('معرفة حالة البوت الحالية'),
@@ -28,7 +28,7 @@ const commands = [
     new SlashCommandBuilder().setName('ask').setDescription('سؤال ذكي (ذكاء اصطناعي مدمج وفوري)').addStringOption(o => o.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('racing-master').setDescription('أسئلة وأخبار Racing Master الذكية').addStringOption(o => o.setName('query').setDescription('سؤالك عن اللعبة').setRequired(true)),
     new SlashCommandBuilder().setName('say').setDescription('يجعل البوت يكرر كلامك').addStringOption(o => o.setName('message').setDescription('النص').setRequired(true)),
-    newSlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(o => o.setName('amount').setDescription('العدد').setRequired(true)),
+    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(o => o.setName('amount').setDescription('العدد').setRequired(true)),
     new SlashCommandBuilder().setName('log').setDescription('معرفة سجل حالة البوت'),
     new SlashCommandBuilder().setName('sup').setDescription('حذف أمر من السيرفر').addStringOption(o => o.setName('command').setDescription('اسم الأمر المراد حذفه').setRequired(true))
 ].map(c => c.toJSON());
@@ -47,12 +47,11 @@ client.once('ready', async () => {
             if (!targetChannel) return;
 
             const events = [
-                "🏎️ **[تحديث وفعالية Racing Master]**: تم إطلاق بطولة السرعة الجديدة كلياً! قم بتعديل المحرك والإطارات وتدرب على المنحنيات الحادة لتحقيق أسرع زمن في السباق.",
+                "🏎️ **[تحديث وفعالية Racing Master]**: تحدي السرعة الجديد متاح الآن! قم بتعديل المحرك والإطارات وتدرب على المنحنيات الحادة لتحقيق أسرع زمن في السباق.",
                 "🚗 **[أخبار السيارات الحصرية]**: سيارة رياضية جديدة انضمّت إلى المعرض اليوم! توجه إلى اللعبة لاكتشاف خصائصها وقوتها الفريدة على الحلبة.",
                 "🏁 **[نصيحة احترافية للسباق]**: التحكم الدقيق في الفرامل عند المنعطفات الخطرة يمنحك أفضلية كبرى على منافسيك. جرّبها الآن في التحدي القادم!",
                 "🏆 **[فعالية المجتمع والمكافآت]**: شارك في سباقات التحدي الحالية لتحصل على مكافآت نادرة وعملات تمكنك من تطوير سيارتك لأقصى أداء."
             ];
-            // اختيار خبر عشوائي متجدد وغير مكرر
             const randomEvent = events[Math.floor(Math.random() * events.length)];
             
             await targetChannel.send(randomEvent);
@@ -67,7 +66,7 @@ client.once('ready', async () => {
 function getSmartAIResponse(query) {
     const q = query.toLowerCase();
     if (q.includes('سعر') || q.includes('بيتكوين') || q.includes('وقت') || q.includes('تحديث')) {
-        return `📊 **التحليل الذكي:** بناءً على المعطيات والبحث الفوري حول (${query})، يُنصح دائماً بمتابعة التحديثات الرسمية والمصادر الموثوقة لضمان الحصول على أحدث المعلومات بدقة عالية.`;
+        return `📊 **التحليل الذكي:** بناءً على المعطيات حول (${query})، يُنصح دائماً بمتابعة التحديثات الرسمية والمصادر الموثوقة لضمان الحصول على أحدث المعلومات بدقة عالية.`;
     } else if (q.includes('سيارة') || q.includes('محرك') || q.includes('تعديل') || q.includes('سرعة') || q.includes('racing')) {
         return `🏎️ **مساعد Racing Master الذكي:** أفضل إستراتيجية للتعامل مع (${query}) هي الاهتمام بتعديل المحرك والإطارات، والتدريب المستمر على المنحنيات الحادة لتحقيق أسرع زمن في السباق!`;
     } else {
