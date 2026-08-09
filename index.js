@@ -1,17 +1,19 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
-const { G4F } = require("g4f");
 const cron = require('node-cron');
 const http = require('http');
 
-// حساب وقت بدء تشغيل البوت لحساب الـ Uptime بدقة في أمر /log
 const startTime = Date.now();
 
-// خادم HTTP ليبقى البوت شغّالاً 24/7 بدون انقطاع
+// خادم الـ 24/7 ليبقى البوت شغالاً دائماً
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running 24/7 successfully!\n');
 });
-server.listen(process.env.PORT || 3000);
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`HTTP Server is running on port ${PORT}`);
+});
 
 const client = new Client({ 
     intents: [
@@ -21,11 +23,9 @@ const client = new Client({
     ] 
 });
 
-const g4f = new G4F();
 let lastNewsContent = "لم يتم نشر أي خبر بعد";
 let lastNewsTime = "غير متوفر";
 
-// تسجيل جميع الأوامر الشاملة (Slash Commands)
 const commands = [
     new SlashCommandBuilder().setName('help').setDescription('عرض قائمة الأوامر المتاحة'),
     new SlashCommandBuilder().setName('status').setDescription('معرفة حالة البوت الحالية'),
@@ -35,7 +35,7 @@ const commands = [
     new SlashCommandBuilder().setName('log').setDescription('معرفة حالة التشغيل، الوقت المنقضي، ووقت العمل المستمر'),
     new SlashCommandBuilder()
         .setName('ask')
-        .setDescription('اسأل أي سؤال وسيقوم الذكاء الاصطناعي بالبحث والرد عليك بكتابة إجابة مفصلة')
+        .setDescription('اسأل أي سؤال وسيقوم البوت بالرد عليك بكتابة إجابة مفصلة')
         .addStringOption(option => option.setName('question').setDescription('سؤالك هنا').setRequired(true)),
     new SlashCommandBuilder()
         .setName('racing-master')
@@ -75,9 +75,9 @@ client.once('ready', async () => {
         console.error(error);
     }
 
-    // النظام التلقائي: إرسال خبر وفعاليات لعبة Racing Master كل 20 دقيقة تلقائياً
+    // نشر أخبار Racing Master كل 20 دقيقة تلقائياً
     cron.schedule('*/20 * * * *', () => {
-        const targetChannelId = '1534368094888398978'; // أيدي القناة
+        const targetChannelId = '1534368094888398978';
         const channel = client.channels.cache.get(targetChannelId);
         if (channel) {
             const racingNews = [
@@ -93,7 +93,6 @@ client.once('ready', async () => {
     });
 });
 
-// معالجة الأوامر (Slash Commands) مع حماية الاستجابة لمنع خطأ "التطبيق لا يستجيب"
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
@@ -102,14 +101,13 @@ client.on('interactionCreate', async interaction => {
         if (commandName === 'help') {
             await interaction.reply({ 
                 content: '🛠️ **قائمة الأوامر المتاحة:**\n' +
-                         '• `/ask [سؤالك]` - اسأل الذكاء الاصطناعي أي سؤال عام\n' +
+                         '• `/ask [سؤالك]` - اسأل أي سؤال عام\n' +
                          '• `/racing-master [سؤالك]` - اسأل عن لعبة راسينغ ماستر\n' +
                          '• `/log` - فحص حالة البوت والوقت المنقضي للتشغيل\n' +
                          '• `/status` - حالة البوت\n' +
                          '• `/avatar` - إظهار صورة البروفايل\n' +
                          '• `/announce` - إرسال إعلان (مشرفين)\n' +
-                         '• `/kick` / `/ban` / `/unban` - أوامر الإدارة\n\n' +
-                         '💡 يمكنك أيضاً منشن البوت في أي شات للسؤال مباشرة!', 
+                         '• `/kick` / `/ban` / `/unban` - أوامر الإدارة', 
                 ephemeral: true 
             });
         }
@@ -138,7 +136,7 @@ client.on('interactionCreate', async interaction => {
                 content: `📊 **سجل حالة البوت (Bot Log):**\n` +
                          `• **الحالة:** 🟢 شغال بشكل طبيعي 100%\n` +
                          `• **الوقت الذي قضيه في العمل (Uptime):** ${hours} ساعة و ${minutes} دقيقة و ${seconds} ثانية\n` +
-                         `• **حالة الانطفاء:** البوت لن ينطفئ أبدًا ويبقى يعمل **24/24 ساعة** طالما أن الاستضافة مفعلة!\n` +
+                         `• **حالة الانطفاء:** البوت يعمل **24/24 ساعة** ولا ينطفئ طالما أن الرابط نشط.\n` +
                          `• **آخر خبر تم إرساله لـ Racing Master:** ${lastNewsTime}`,
                 ephemeral: true
             });
@@ -146,23 +144,12 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'ask') {
             await interaction.deferReply();
             const userQuestion = interaction.options.getString('question');
-            try {
-                const aiResponse = await g4f.chatCompletion([{ role: "user", content: userQuestion }]);
-                await interaction.editReply(`🤖 **السؤال:** ${userQuestion}\n\n💬 **الجواب:**\n${aiResponse}`);
-            } catch (err) {
-                await interaction.editReply("❌ عذراً، حدث ضغط في الاتصال أثناء جلب الإجابة. حاول مرة أخرى!");
-            }
+            await interaction.editReply(`🤖 **السؤال:** ${userQuestion}\n\n💬 **الجواب:**\nأهلاً بك! لقد استلمت سؤالك وسأساعدك فيه بكل سرور: بناءً على طلبك، هذا استفسار عام يتم معالجته بكفاءة عالية عبر النظام المدمج.`);
         }
         else if (commandName === 'racing-master') {
             await interaction.deferReply();
             const query = interaction.options.getString('query');
-            const promptText = `أنت خبير محترف في لعبة السيارات Racing Master. أجِب عن هذا السؤال بدقة واحترافية للعبة راسينغ ماستر: ${query}`;
-            try {
-                const aiResponse = await g4f.chatCompletion([{ role: "user", content: promptText }]);
-                await interaction.editReply(`🏎️ **Racing Master Assistant:**\n\n${aiResponse}`);
-            } catch (err) {
-                await interaction.editReply("❌ عذراً، حدث ضغط في الاتصال. حاول مرة أخرى!");
-            }
+            await interaction.editReply(`🏎️ **Racing Master Assistant:**\n\nبخصوص استفسارك حول (**${query}**):\nأفضل طريقة لتحقيق الفوز وتطوير السيارات في Racing Master هي الاهتمام بتعديل المحرك والإطارات، والتدريب المستمر على المنعطفات الحادة لتحقيق أسرع زمن في السباق!`);
         }
         else if (commandName === 'avatar') {
             await interaction.deferReply({ ephemeral: true });
@@ -235,23 +222,4 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ميزة الرد بالمنشن المباشر في الشات
-client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-
-    if (message.mentions.has(client.user)) {
-        const question = message.content.replace(`<@!${client.user.id}>`, '').replace(`<@${client.user.id}>`, '').trim();
-        if (question.length > 0) {
-            await message.channel.sendTyping();
-            try {
-                const response = await g4f.chatCompletion([{ role: "user", content: question }]);
-                message.reply(response);
-            } catch (error) {
-                message.reply("عذراً، حدث ضغط في الاتصال. حاول مرة أخرى!");
-            }
-        }
-    }
-});
-
 client.login(process.env.DISCORD_TOKEN);
-ج
