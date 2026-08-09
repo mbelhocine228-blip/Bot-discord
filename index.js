@@ -18,6 +18,7 @@ const client = new Client({
     ] 
 });
 
+// المفتاح مدمج هنا مباشرة لضمان العمل 100% دون الاعتماد على Render
 const genAI = new GoogleGenerativeAI("AQ.Ab8RN6IsPcWQliXBObUFg46AAFaOXAWltu_qYrGfFK_5at9t0w");
 
 let lastNewsTime = "لم يتم النشر بعد منذ تشغيل البوت";
@@ -95,11 +96,10 @@ async function askGemini(promptText) {
         return response.text();
     } catch (error) {
         console.error("Gemini Error Details:", error);
-        return "عذراً، استغرق البحث وقتاً طويلاً أو حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي. جرب مرة أخرى بعد قليل.";
+        return "عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي.";
     }
 }
 
-// تم تطوير هذه الوظيفة لتصبح ذكية بالكامل مثل نظام الذكاء الاصطناعي العام وتجيب عن أي شيء يخص Racing Master
 async function askRacingMaster(promptText) {
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
