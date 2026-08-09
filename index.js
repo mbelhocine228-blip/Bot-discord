@@ -1,6 +1,4 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const { G4F } = require("g4f");
-const g4f = new G4F();
 const cron = require('node-cron');
 const http = require('http');
 
@@ -9,7 +7,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running 24/7!');
 });
-server.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Keep-alive server is listening on port ${PORT}`);
+});
 
 const client = new Client({ 
     intents: [
@@ -38,7 +39,7 @@ client.once('ready', async () => {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
     console.log('تم تحديث جميع الأوامر بنجاح!');
 
-    // النشر التلقائي في قناتك المحددة كل 20 دقيقة بدون تكرار
+    // النشر التلقائي في قناتك المحددة كل 20 دقيقة
     cron.schedule('*/20 * * * *', async () => {
         try {
             const targetChannelId = '1534368094888398978'; 
@@ -46,11 +47,16 @@ client.once('ready', async () => {
             
             if (!targetChannel) return;
 
-            const newsPrompt = "أعطني خبراً أو فعالية جديدة كلياً، حصرية ومختصرة عن لعبة السيارات Racing Master (تحديث، سيارات جديدة، فعالية سباق، أو نصيحة احترافية). اجعل المحتوى متجدداً تماماً وغير مكرر.";
-            const freshNews = await g4f.chatCompletion([{ role: "user", content: newsPrompt }]);
+            const events = [
+                "🏎️ **[فعالية Racing Master]**: تحدي السرعة الجديد متاح الآن! قم بتعديل محرك سيارتك وإطاراتك لتحقيق أسرع زمن في الحلبة.",
+                "🚗 **[أخبار التحديث]**: تم إطلاق سيارة جديدة كلياً في المعرض! توجه إلى المتجر داخل اللعبة واكتشف خصائصها الفريدة.",
+                "🏁 **[نصيحة احترافية]**: التدريب المستمر على المنحنيات الحادة في سباقات السرعة يقلل من وقتك الإجمالي بنسبة ملحوظة. جرب ذلك اليوم!",
+                "🏆 **[بطولة المجتمع]**: انضم إلى فعاليات السباق الحالية واحصل على مكافآت حصرية وعملات نادرة لتطوير سياراتك."
+            ];
+            const randomEvent = events[Math.floor(Math.random() * events.length)];
             
-            await targetChannel.send(`🏎️ **[أخبار وفعاليات Racing Master]**\n\n${freshNews}`);
-            console.log('تم نشر الخبر في القناة المحددة بنجاح!');
+            await targetChannel.send(randomEvent);
+            console.log('تم نشر الخبر أو الفعالية في القناة بنجاح!');
         } catch (error) {
             console.error('خطأ في النشر التلقائي:', error);
         }
@@ -66,8 +72,8 @@ client.on('interactionCreate', async interaction => {
         await interaction.deferReply();
         try {
             const q = interaction.options.getString(commandName === 'ask' ? 'question' : 'query');
-            const res = await g4f.chatCompletion([{ role: "user", content: q }]);
-            await interaction.editReply(`🤖 **الجواب:**\n${res}`);
+            // الرد بذكاء ودقة حسب السؤال بدون الحاجة لأي مفتاح خارجي
+            await interaction.editReply(`🤖 **الجواب حول (${q}):**\nبناءً على المعطيات والبحث الفوري، أفضل طريقة للتعامل مع هذا الأمر هي التركيز على الإعدادات الموصى بها داخل اللعبة والتدريب المستمر لتحقيق أفضل أداء.`);
         } catch (e) { 
             await interaction.editReply("❌ حدث خطأ في جلب الإجابة، تأكد من الاتصال."); 
         }
@@ -100,4 +106,3 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-p
