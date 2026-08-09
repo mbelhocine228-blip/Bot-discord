@@ -18,7 +18,6 @@ const client = new Client({
     ] 
 });
 
-// المفتاح مدمج هنا مباشرة لضمان العمل 100% دون الاعتماد على Render
 const genAI = new GoogleGenerativeAI("AQ.Ab8RN6IsPcWQliXBObUFg46AAFaOXAWltu_qYrGfFK_5at9t0w");
 
 let lastNewsTime = "لم يتم النشر بعد منذ تشغيل البوت";
@@ -29,7 +28,7 @@ const commands = [
     new SlashCommandBuilder().setName('news-status').setDescription('مراقبة حالة النشر التلقائي للأخبار'),
     new SlashCommandBuilder()
         .setName('ai')
-        .setDescription('البحث عن أي معلومة أو إجابة باستخدام الذكاء الاصطناعي')
+        .setDescription('البحث في جودل والذكاء الاصطناعي عن أي معلومة')
         .addStringOption(option => option.setName('question').setDescription('السؤال أو الموضوع الذي تريد البحث عنه').setRequired(true)),
     new SlashCommandBuilder()
         .setName('racing-master')
@@ -48,7 +47,7 @@ const commands = [
         .setDescription('طرد عضو من السيرفر')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder()
+    newSlashCommandBuilder()
         .setName('ban')
         .setDescription('حظر عضو من السيرفر')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
@@ -90,13 +89,13 @@ async function askGemini(promptText) {
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent([
-            { text: "أنت مساعد ذكي ومحترف جداً. تجيب على الأسئلة وتبحث عن المعلومات الدقيقة وتقدمها باللغة العربية بأسلوب منظم وواضح. السؤال هو: " + promptText }
+            { text: "أنت مساعد وباحث ذكي مرتب ومنظم جداً. قم بالبحث والتحليل للإجابة على هذا السؤال بدقة وعمق وتقديم التفاصيل الكاملة باللغة العربية: " + promptText }
         ]);
         const response = await result.response;
         return response.text();
     } catch (error) {
         console.error("Gemini Error Details:", error);
-        return "عذراً، حدث خطأ في الاتصال بخدمة الذكاء الاصطناعي.";
+        return "عذراً، استغرق البحث وقتاً طويلاً أو حدث خطأ في جلب المعلومات. جرب مرة أخرى.";
     }
 }
 
@@ -104,7 +103,7 @@ async function askRacingMaster(promptText) {
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent([
-            { text: "أنت خبير محترف وموسوعة شاملة لكل ما يخص لعبة سباق السيارات الشهيرة Racing Master (أسرار، سيارات، تعديلات، تحكم، خطط، وكل تفاصيل اللعبة). أجب عن هذا السؤال بدقة واحترافية باللغة العربية: " + promptText }
+            { text: "أنت خبير محترف وموسوعة شاملة لكل ما يخص لعبة سباق السيارات الشهيرة Racing Master. ابحث وقدم أفضل الإجابات، الأسرار، والإعدادات الاحترافية لهذا السؤال باللغة العربية: " + promptText }
         ]);
         const response = await result.response;
         return response.text();
@@ -123,7 +122,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '🛠️ **قائمة الأوامر المتاحة:**\n`/ai` - البحث وسؤال الذكاء الاصطناعي\n`/racing-master` - الإجابة عن أي استفسار يخص لعبة Racing Master\n`/news-status` - حالة الأخبار التلقائية\n`/clear` - مسح الرسائل\n`/say` - إرسال رسالة\n`/kick` - طرد\n`/ban` - حظر\n`/unban` - فك حظر', ephemeral: true });
     } 
     else if (commandName === 'status') {
-        await interaction.reply({ content: '🟢 البوت يعمل بكفاءة تامة!', ephemeral: true });
+        await interaction.reply({ content: '🟢 البوت يعمل بكفاءة تامة للبحث والإجابة!', ephemeral: true });
     }
     else if (commandName === 'news-status') {
         await interaction.reply({ content: `📡 **حالة النشر التلقائي (Racing Master):**\n- الحالة: تعمل بنجاح\n- آخر وقت نشر: ${lastNewsTime}`, ephemeral: true });
