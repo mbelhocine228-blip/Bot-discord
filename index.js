@@ -18,7 +18,7 @@ const client = new Client({
     ] 
 });
 
-const genAI = new GoogleGenerativeAI("AIzaSyD-YourAPIKeyHerePlaceholder-Example"); // ضع مفتاح Gemini الصحيح هنا إذا أردت أو اتركه
+const genAI = new GoogleGenerativeAI("AIzaSyD-YourAPIKeyHerePlaceholder-Example"); // ضع مفتاح Gemini الصحيح هنا
 
 let lastNewsTime = "لم يتم النشر بعد";
 
@@ -60,7 +60,9 @@ client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
+        // تحديث وتفريغ الأوامر القديمة وتسجيل الجديدة فوراً
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('Successfully reloaded application (slash) commands.');
     } catch (error) {
         console.error(error);
     }
@@ -91,7 +93,7 @@ async function askAI(promptText) {
         return response.text();
     } catch (error) {
         console.error(error);
-        return "عذراً، تأكد من صحة مفتاح الذكاء الاصطناعي.";
+        return "عذراً، حدث خطأ في الاتصال بالذكاء الاصطناعي.";
     }
 }
 
@@ -131,13 +133,15 @@ client.on('interactionCreate', async interaction => {
     else if (commandName === 'kick') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return;
         const target = interaction.options.getUser('target');
-        await interaction.guild.members.kick(target.id);
+        const reason = interaction.options.getString('reason') || 'بدون سبب';
+        await interaction.guild.members.kick(target.id, { reason });
         await interaction.reply(`👢 تم طرد ${target.tag}.`);
     }
     else if (commandName === 'ban') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return;
         const target = interaction.options.getUser('target');
-        await interaction.guild.members.ban(target.id);
+        const reason = interaction.options.getString('reason') || 'بدون سبب';
+        await interaction.guild.members.ban(target.id, { reason });
         await interaction.reply(`🔨 تم حظر ${target.tag}.`);
     }
     else if (commandName === 'unban') {
