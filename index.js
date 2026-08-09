@@ -28,7 +28,7 @@ const commands = [
     new SlashCommandBuilder().setName('news-status').setDescription('مراقبة حالة النشر التلقائي للأخبار'),
     new SlashCommandBuilder()
         .setName('ai')
-        .setDescription('البحث في جودل والذكاء الاصطناعي عن أي معلومة')
+        .setDescription('البحث والرد على أي سؤال باستخدام الذكاء الاصطناعي')
         .addStringOption(option => option.setName('question').setDescription('السؤال أو الموضوع الذي تريد البحث عنه').setRequired(true)),
     new SlashCommandBuilder()
         .setName('racing-master')
@@ -47,7 +47,7 @@ const commands = [
         .setDescription('طرد عضو من السيرفر')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('السبب')),
-    newSlashCommandBuilder()
+    new SlashCommandBuilder()
         .setName('ban')
         .setDescription('حظر عضو من السيرفر')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
@@ -95,7 +95,7 @@ async function askGemini(promptText) {
         return response.text();
     } catch (error) {
         console.error("Gemini Error Details:", error);
-        return "عذراً، استغرق البحث وقتاً طويلاً أو حدث خطأ في جلب المعلومات. جرب مرة أخرى.";
+        return "عذراً، حدث خطأ في جلب المعلومات. جرب مرة أخرى.";
     }
 }
 
@@ -204,3 +204,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+
