@@ -18,14 +18,14 @@ const client = new Client({
     ] 
 });
 
-const genAI = new GoogleGenerativeAI("AQ.Ab8RN6IsPcWQliXBObUFg46AAFaOXAWltu_qYrGfFK_5at9t0w");
+const genAI = new GoogleGenerativeAI("AIzaSyD-YourAPIKeyHerePlaceholder-Example"); // ضع مفتاح Gemini الصحيح هنا إذا أردت أو اتركه
 
-let lastNewsTime = "لم يتم النشر بعد منذ تشغيل البوت";
+let lastNewsTime = "لم يتم النشر بعد";
 
 const commands = [
-    new SlashCommandBuilder().setName('help').setDescription('قائمة الأوامر المتاحة'),
-    new SlashCommandBuilder().setName('status').setDescription('فحص حالة البوت'),
-    new SlashCommandBuilder().setName('news-status').setDescription('مراقبة حالة النشر التلقائي للأخبار'),
+    new SlashCommandBuilder().setName('help').setDescription('قائمة الأوامر'),
+    new SlashCommandBuilder().setName('status').setDescription('حالة البوت'),
+    new SlashCommandBuilder().setName('news-status').setDescription('حالة الأخبار التلقائية'),
     new SlashCommandBuilder()
         .setName('ai')
         .setDescription('اسأل الذكاء الاصطناعي عن أي شيء')
@@ -33,7 +33,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName('racing-master')
         .setDescription('استشارات لعبة Racing Master')
-        .addStringOption(option => option.setName('query').setDescription('سؤالك عن اللعبة').setRequired(true)),
+        .addStringOption(option => option.setName('query').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder()
         .setName('clear')
         .setDescription('مسح الرسائل')
@@ -43,20 +43,17 @@ const commands = [
         .setDescription('إرسال رسالة')
         .addStringOption(option => option.setName('message').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('طرد عضو')
+        .setName('kick').setDescription('طرد')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder()
-        .setName('ban')
-        .setDescription('حظر عضو')
+        .setName('ban').setDescription('حظر')
         .addUserOption(option => option.setName('target').setDescription('العضو').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder()
-        .setName('unban')
-        .setDescription('فك الحظر')
+        .setName('unban').setDescription('فك الحظر')
         .addStringOption(option => option.setName('userid').setDescription('أيدي العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('announce-now').setDescription('نشر إعلان فوري')
+    new SlashCommandBuilder().setName('announce-now').setDescription('نشر إعلان')
 ].map(command => command.toJSON());
 
 client.once('ready', async () => {
@@ -73,9 +70,9 @@ client.once('ready', async () => {
         const channel = client.channels.cache.get(targetChannelId);
         if (channel) {
             const newsList = [
-                "📢 **أخبار Racing Master:** ترقبوا أحدث الفعاليات وتحديثات السيارات القادمة في اللعبة!",
-                "🏎️ **مفاجآت Racing Master:** هل أنت مستعد للسباق القادم؟ تجهّز لتحديات ومسابقات كبرى هذا الأسبوع!",
-                "🔥 **تحديثات اللعبة:** تابع معنا أحدث أخبار وتكتيكات الاحتراف في اللعبة لتكون الأول دائماً!"
+                "📢 **أخبار Racing Master:** ترقبوا أحدث الفعاليات وتحديثات السيارات القادمة!",
+                "🏎️ **مفاجآت Racing Master:** تجهّز لتحديات ومسابقات كبرى هذا الأسبوع!",
+                "🔥 **تحديثات اللعبة:** تابع معنا أحدث أخبار وتكتيكات الاحتراف لتكون الأول دائماً!"
             ];
             const randomNews = newsList[Math.floor(Math.random() * newsList.length)];
             channel.send(randomNews);
@@ -88,13 +85,13 @@ async function askAI(promptText) {
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent([
-            { text: "أنت مساعد ذكي ومحترف. أجب عن هذا السؤال بوضوح وباللغة العربية وبأسلوب الذكاء الاصطناعي: " + promptText }
+            { text: "أنت مساعد ذكي ومحترف. أجب بوضوح باللغة العربية: " + promptText }
         ]);
         const response = await result.response;
         return response.text();
     } catch (error) {
         console.error(error);
-        return "عذراً، حدث خطأ في الرد. حاول مرة أخرى.";
+        return "عذراً، تأكد من صحة مفتاح الذكاء الاصطناعي.";
     }
 }
 
@@ -104,7 +101,7 @@ client.on('interactionCreate', async interaction => {
     const { commandName } = interaction;
 
     if (commandName === 'help') {
-        await interaction.reply({ content: '🛠️ **الأوامر:** `/ai` للذكاء الاصطناعي، `/racing-master` للعبة، وباقي أوامر الإدارة.', ephemeral: true });
+        await interaction.reply({ content: '🛠️ الأوامر تعمل بنجاح!', ephemeral: true });
     } 
     else if (commandName === 'status') {
         await interaction.reply({ content: '🟢 البوت يعمل بكفاءة!', ephemeral: true });
@@ -119,13 +116,15 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply(answer);
     }
     else if (commandName === 'clear') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return interaction.reply({ content: '❌ ليس لديك صلاحية!', ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
+            return interaction.reply({ content: '❌ ليس لديك صلاحية!', ephemeral: true });
         const count = interaction.options.getInteger('count');
         await interaction.channel.bulkDelete(count, true).catch(() => {});
         await interaction.reply({ content: `✅ تم مسح ${count} رسالة.`, ephemeral: true });
     }
     else if (commandName === 'say') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return.reply({ content: '❌ للمشرفين!', ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+            return interaction.reply({ content: '❌ للمشرفين!', ephemeral: true });
         await interaction.channel.send(interaction.options.getString('message'));
         await interaction.reply({ content: '✅ تم الإرسال.', ephemeral: true });
     }
@@ -148,7 +147,7 @@ client.on('interactionCreate', async interaction => {
     }
     else if (commandName === 'announce-now') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-        await interaction.channel.send("🚨 **إعلان رسمي:** ترقبوا أقوى الفعاليات والمسابقات في السيرفر الآن!");
+        await interaction.channel.send("🚨 **إعلان رسمي:** ترقبوا الفعاليات والمسابقات!");
         await interaction.reply({ content: '✅ تم النشر.', ephemeral: true });
     }
 });
