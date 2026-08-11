@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBitsconst { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// لوحة التحكم الأساسية
+// لوحة التحكم الأساسية (محدثة بتصميم كامل ونظيف)
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) {
         return res.redirect('/login');
@@ -91,22 +91,32 @@ app.get('/dashboard', (req, res) => {
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
         guildsHtml += `
-            <div style="background: #2f3136; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="background: #2f3136; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #444;">
                 <span style="font-size: 18px; font-weight: bold;">🛡️ ${guild.name}</span>
-                <a href="/control/${guild.id}" style="background: #5865F2; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none;">إدارة</a>
+                <a href="/control/${guild.id}" style="background: #5865F2; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold;">إدارة السيرفر</a>
             </div>
         `;
     });
 
     res.send(`
-        <div style="font-family: Arial; padding: 40px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
-            <h2>مرحباً بك، ${req.user.username || 'مستخدم'} 👋</h2>
-            <p style="color: #b9bbbe;">اختر السيرفر للتحكم به:</p>
-            <div style="max-width: 600px; margin-top: 20px;">
-                ${guildsHtml || '<p>لا توجد سيرفرات متاحة أو البوت ليس موجوداً فيها.</p>'}
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>لوحة التحكم - RKS•ＰＯＷＥＲ</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; background: #1a1a1a; color: white; margin: 0;">
+            <div style="max-width: 600px; margin: auto;">
+                <h2>مرحباً بك، ${req.user.username || 'مستخدم'} 👋</h2>
+                <p style="color: #b9bbbe;">اختر السيرفر الذي تريد التحكم به وتعديله:</p>
+                <div style="margin-top: 20px;">
+                    ${guildsHtml || '<p style="color: #f04747;">لا توجد سيرفرات متاحة أو البوت ليس موجوداً فيها.</p>'}
+                </div>
+                <br>
+                <a href="/logout" style="color: #f04747; text-decoration: none; font-weight: bold;">تسجيل الخروج 🚪</a>
             </div>
-            <br><a href="/logout" style="color: #f04747; text-decoration: none; font-weight: bold;">تسجيل الخروج 🚪</a>
-        </div>
+        </body>
+        </html>
     `);
 });
 
@@ -119,15 +129,25 @@ app.get('/control/:guildId', (req, res) => {
     if (!guild) return res.send('السيرفر غير موجود أو البوت ليس داخله.');
 
     res.send(`
-        <div style="font-family: Arial; padding: 40px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
-            <h2>إدارة سيرفر: ${guild.name} ⚙️</h2>
-            <form action="/send" method="POST" style="background: #2f3136; padding: 20px; border-radius: 8px; max-width: 500px; margin-top: 20px;">
-                <input type="hidden" name="guildId" value="${guild.id}">
-                <textarea name="msg" rows="4" style="width: 100%; padding: 10px; background: #202225; color: white; border: 1px solid #444; border-radius: 6px;" placeholder="اكتب نص الإعلان..."></textarea><br><br>
-                <button type="submit" style="background: #3ba55d; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">إرسال الإعلان 📢</button>
-            </form><br>
-            <a href="/dashboard" style="color: #00aff4; text-decoration: none;">← العودة لقائمة السيرفرات</a>
-        </div>
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>إدارة ${guild.name}</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; background: #1a1a1a; color: white; margin: 0;">
+            <div style="max-width: 600px; margin: auto;">
+                <h2>إدارة سيرفر: ${guild.name} ⚙️</h2>
+                <form action="/send" method="POST" style="background: #2f3136; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #444;">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">إرسال إعلان رسمي:</label>
+                    <textarea name="msg" rows="4" style="width: 100%; padding: 10px; background: #202225; color: white; border: 1px solid #444; border-radius: 6px; box-sizing: border-box;" placeholder="اكتب نص الإعلان هنا..."></textarea><br><br>
+                    <button type="submit" style="background: #3ba55d; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;">إرسال الإعلان 📢</button>
+                </form><br>
+                <a href="/dashboard" style="color: #00aff4; text-decoration: none; font-weight: bold;">← العودة لقائمة السيرفرات</a>
+            </div>
+        </body>
+        </html>
     `);
 });
 
