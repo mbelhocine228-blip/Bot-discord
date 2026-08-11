@@ -16,7 +16,6 @@ const client = new Client({
     ] 
 });
 
-// تخزين إعدادات كل سيرفر (روم الأخبار + حالة تفعيل الأوامر)
 const guildSettings = new Map();
 
 app.use(express.urlencoded({ extended: true }));
@@ -25,7 +24,7 @@ app.use(session({
     secret: 'rks-koya-master-secret-999', 
     resave: false, 
     saveUninitialized: false,
-    cookie: { secure: true, httpOnly: true, sameSite: 'lax' }
+    cookie: { secure: false, httpOnly: true, sameSite: 'lax' }
 }));
 
 app.use(passport.initialize());
@@ -49,7 +48,6 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// --- قائمة الـ 30 أمر الشاملة ---
 const commandList = [
     'ban', 'unban', 'kick', 'mute', 'unmute', 'clear', 'warn', 'lock', 'unlock', 
     'slowmode', 'ping', 'say', 'ann', 'embed', 'poll', 'avatar', 'serverinfo', 
@@ -67,7 +65,6 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
     } catch (error) { console.error(error); }
 
-    // --- نظام الإرسال التلقائي لأخبار Racing Master كل 20 دقيقة ---
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
@@ -96,7 +93,6 @@ client.once('ready', async () => {
     }, 20 * 60 * 1000);
 });
 
-// --- التصميم الاحترافي للوحة التحكم (متوافق مع الهواتف والكمبيوتر) ---
 const commonStyle = `
     body {
         background: linear-gradient(135deg, #0a0b10 0%, #151828 50%, #221535 100%);
@@ -121,106 +117,19 @@ const commonStyle = `
         top: 0;
         overflow-y: auto;
     }
-    .sidebar h3 {
-        color: #FFD700;
-        font-size: 18px;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-    .sidebar a {
-        color: #b9bbbe;
-        text-decoration: none;
-        padding: 12px 15px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        font-size: 14px;
-        transition: 0.3s;
-        display: block;
-    }
-    .sidebar a:hover, .sidebar a.active {
-        background: rgba(88, 101, 242, 0.2);
-        color: #ffffff;
-        border-left: 4px solid #5865F2;
-    }
-    .main-content {
-        flex: 1;
-        padding: 40px;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        overflow-y: auto;
-    }
-    .glass-card {
-        background: rgba(25, 27, 38, 0.85);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
-        border-radius: 20px;
-        padding: 35px;
-        width: 100%;
-        max-width: 800px;
-    }
-    .btn-discord {
-        background: #5865F2;
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        border-radius: 10px;
-        display: inline-block;
-        font-weight: bold;
-        font-size: 14px;
-        transition: 0.3s;
-    }
-    .btn-discord:hover { background: #4752C4; }
-    .btn-add {
-        background: #23a55a;
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        border-radius: 10px;
-        display: inline-block;
-        font-weight: bold;
-        font-size: 14px;
-    }
-    .section-box {
-        background: rgba(255,255,255,0.04);
-        padding: 20px;
-        border-radius: 12px;
-        margin-top: 15px;
-        border: 1px solid rgba(255,255,255,0.06);
-    }
-    select, button.save-btn {
-        width: 100%;
-        padding: 12px;
-        background: rgba(0,0,0,0.4);
-        border: 1px solid rgba(255,255,255,0.15);
-        color: white;
-        border-radius: 8px;
-        margin-top: 10px;
-        font-size: 14px;
-    }
-    button.save-btn {
-        background: #23a55a;
-        font-weight: bold;
-        cursor: pointer;
-        transition: 0.3s;
-    }
+    .sidebar h3 { color: #FFD700; font-size: 18px; margin-bottom: 20px; text-align: center; }
+    .sidebar a { color: #b9bbbe; text-decoration: none; padding: 12px 15px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; transition: 0.3s; display: block; }
+    .sidebar a:hover, .sidebar a.active { background: rgba(88, 101, 242, 0.2); color: #ffffff; border-left: 4px solid #5865F2; }
+    .main-content { flex: 1; padding: 40px; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
+    .glass-card { background: rgba(25, 27, 38, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6); border-radius: 20px; padding: 35px; width: 100%; max-width: 800px; }
+    .btn-discord { background: #5865F2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 10px; display: inline-block; font-weight: bold; font-size: 14px; }
+    .btn-add { background: #23a55a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 10px; display: inline-block; font-weight: bold; font-size: 14px; }
+    .section-box { background: rgba(255,255,255,0.04); padding: 20px; border-radius: 12px; margin-top: 15px; border: 1px solid rgba(255,255,255,0.06); }
+    select, button.save-btn { width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: white; border-radius: 8px; margin-top: 10px; font-size: 14px; }
+    button.save-btn { background: #23a55a; font-weight: bold; cursor: pointer; transition: 0.3s; }
     button.save-btn:hover { background: #1f8b4c; }
-    .switch-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 12px;
-        margin-top: 15px;
-    }
-    .switch-item {
-        background: rgba(255,255,255,0.03);
-        padding: 10px;
-        border-radius: 8px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border: 1px solid rgba(255,255,255,0.05);
-    }
+    .switch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 15px; }
+    .switch-item { background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.05); }
 `;
 
 app.get('/', (req, res) => {
@@ -238,7 +147,6 @@ app.get('/dashboard', (req, res) => {
     res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>اختر السيرفر</title><style>body { justify-content: center; align-items: center; } ${commonStyle}</style></head><body><div class="glass-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;"><h3 style="margin:0; color:#FFD700;">👋 مرحباً بك، ${req.user.username}</h3><a href="/logout" style="background:#ed4245; color:white; padding:10px 18px; text-decoration:none; border-radius:8px; font-size:13px; font-weight:bold;">خروج</a></div><p style="color:#b9bbbe;">اختر السيرفر أدناه لإدارته:</p><div style="display:flex; gap:20px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
 });
 
-// --- حفظ التعديلات عند الضغط على حفظ في اللوحة ---
 app.post('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
@@ -265,7 +173,6 @@ app.post('/control/:guildId/:section', (req, res) => {
     res.redirect(`/control/${guildId}/${section}?saved=true`);
 });
 
-// --- لوحة التحكم التفصيلية مع الأقسام واختيار الرومات وأزرار التفعيل ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -306,7 +213,7 @@ app.get('/control/:guildId/:section', (req, res) => {
     else if (section === 'racing') {
         let channelsHtml = '<option value="">-- اختر روم الأخبار --</option>';
         guild.channels.cache.forEach(channel => {
-            if (channel.type === 0) { // Text Channel
+            if (channel.type === 0) {
                 let selected = settings.newsChannelId === channel.id ? 'selected' : '';
                 channelsHtml += `<option value="${channel.id}" ${selected}># ${channel.name}</option>`;
             }
@@ -386,10 +293,9 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// --- تنفيذ الأوامر داخل ديسكورد مع فحص إذا كان الأمر معطلاً من اللوحة ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
-    const { commandName, options, member, guild } = interaction;
+    const { commandName, guild } = interaction;
 
     let settings = guildSettings.get(guild.id);
     if (settings && settings.disabledCommands && settings.disabledCommands.includes(commandName)) {
@@ -415,4 +321,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم الشاملة تعمل بأعلى ميزات Koya ودسكورد!'));
+app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم الشاملة تعمل بكامل طاقتها على Render!'));
