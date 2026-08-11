@@ -44,10 +44,9 @@ app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
-const guildSettings = {};
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// --- تسجيل الأوامر ---
+// --- تسجيل الأوامر (كل الأوامر السابقة) ---
 const commands = [
     new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
@@ -90,10 +89,10 @@ client.once('ready', async () => {
     } catch (error) { console.error(error); }
 });
 
-// --- تصميم صفحات الويب بـ خلفية فخمة (Gradient & Glassmorphism) ---
+// --- تصميم الويب المحسن بخلفية فخمة وعناصر أكبر وأوضح ---
 const commonStyle = `
     body {
-        background: linear-gradient(135deg, #0f1016 0%, #1a1c29 50%, #291b3b 100%);
+        background: linear-gradient(135deg, #0a0b10 0%, #151828 50%, #221535 100%);
         color: #ffffff;
         min-height: 100vh;
         margin: 0;
@@ -103,27 +102,28 @@ const commonStyle = `
         align-items: center;
     }
     .glass-card {
-        background: rgba(30, 31, 42, 0.75);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-        border-radius: 16px;
-        padding: 35px;
+        background: rgba(25, 27, 38, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+        border-radius: 20px;
+        padding: 40px;
         text-align: center;
-        max-width: 450px;
+        max-width: 500px;
         width: 90%;
     }
     .btn-discord {
         background: #5865F2;
         color: white;
-        padding: 12px 24px;
+        padding: 14px 28px;
         text-decoration: none;
-        border-radius: 8px;
+        border-radius: 10px;
         display: inline-block;
         font-weight: bold;
+        font-size: 15px;
         transition: 0.3s;
-        box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+        box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
     }
     .btn-discord:hover {
         background: #4752C4;
@@ -132,11 +132,12 @@ const commonStyle = `
     .btn-add {
         background: #23a55a;
         color: white;
-        padding: 10px 20px;
+        padding: 12px 24px;
         text-decoration: none;
-        border-radius: 8px;
+        border-radius: 10px;
         display: inline-block;
         font-weight: bold;
+        font-size: 14px;
         transition: 0.3s;
     }
     .btn-add:hover {
@@ -146,17 +147,17 @@ const commonStyle = `
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>RKS Dashboard</title><style>${commonStyle}</style></head><body><div class="glass-card"><h2 style="color: #FFD700; margin-bottom: 10px; font-size: 26px;">RKS•ＰＯＷＥＲ</h2><p style="color: #b9bbbe; margin-bottom: 25px; font-size: 14px;">لوحة التحكم الشاملة لإدارة السيرفرات والألعاب</p><a href="/login" class="btn-discord">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 20px;"><a href="${INVITE_URL}" target="_blank" class="btn-add" style="font-size: 13px;">+ إضافة البوت لسيرفرك</a></div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>RKS Dashboard</title><style>${commonStyle}</style></head><body><div class="glass-card"><h2 style="color: #FFD700; margin-bottom: 12px; font-size: 30px;">RKS•ＰＯＷＥＲ</h2><p style="color: #b9bbbe; margin-bottom: 30px; font-size: 15px;">لوحة التحكم الشاملة لإدارة السيرفرات والألعاب</p><a href="/login" class="btn-discord">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 22px;"><a href="${INVITE_URL}" target="_blank" class="btn-add">+ إضافة البوت لسيرفرك</a></div></div></body></html>`);
 });
 
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
-        let iconUrl = guild.iconURL() ? guild.iconURL() : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
-        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(40,42,54,0.6);padding:15px;border-radius:12px;width:130px;border:1px solid rgba(255,255,255,0.05);transition:0.3s;"><img src="${iconUrl}" style="width:65px;height:65px;border-radius:50%;object-fit:cover;margin-bottom:10px;"><span style="font-size:13px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
+        let iconUrl = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
+        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(45,48,64,0.7);padding:20px;border-radius:16px;width:150px;border:1px solid rgba(255,255,255,0.08);transition:0.3s;"><img src="${iconUrl}" style="width:85px;height:85px;border-radius:50%;object-fit:cover;margin-bottom:12px;box-shadow: 0 4px 12px rgba(0,0,0,0.4);"><span style="font-size:14px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
     });
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>اختر السيرفر</title><style>${commonStyle} .dashboard-card { background: rgba(30, 31, 42, 0.85); max-width: 700px; width: 95%; padding: 30px; border-radius: 16px; backdrop-filter: blur(16px); }</style></head><body><div class="dashboard-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;"><h3 style="margin:0; color:#FFD700;">👋 مرحباً بك، ${req.user.username}</h3><div><a href="${INVITE_URL}" target="_blank" class="btn-add" style="margin-left: 10px; font-size:12px;">+ إضافة بوت جديد</a><a href="/logout" style="background:#ed4245; color:white; padding:8px 15px; text-decoration:none; border-radius:6px; font-size:12px; font-weight:bold;">خروج</a></div></div><p style="color:#b9bbbe; font-size:14px; margin-bottom:20px;">اختر السيرفر لإدارته والتحكم بأقسامه:</p><div style="display:flex; gap:15px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>اختر السيرفر</title><style>${commonStyle} .dashboard-card { background: rgba(25, 27, 38, 0.9); max-width: 750px; width: 95%; padding: 35px; border-radius: 20px; }</style></head><body><div class="dashboard-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;"><h3 style="margin:0; color:#FFD700; font-size: 20px;">👋 مرحباً بك، ${req.user.username}</h3><div><a href="${INVITE_URL}" target="_blank" class="btn-add" style="margin-left: 10px; padding: 10px 18px; font-size:13px;">+ إضافة بوت جديد</a><a href="/logout" style="background:#ed4245; color:white; padding:10px 18px; text-decoration:none; border-radius:8px; font-size:13px; font-weight:bold;">خروج</a></div></div><p style="color:#b9bbbe; font-size:15px; margin-bottom:25px;">اختر السيرفر أدناه للتحكم بإعداداته وأقسامه:</p><div style="display:flex; gap:20px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
 });
 
 app.get('/control/:guildId/:section', (req, res) => {
@@ -164,10 +165,12 @@ app.get('/control/:guildId/:section', (req, res) => {
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) return res.send('السيرفر غير موجود.');
     
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>إدارة ${guild.name}</title><style>${commonStyle}</style></head><body><div class="glass-card"><h2 style="color:#FFD700;">لوحة تحكم سيرفر: ${guild.name} 🛡️</h2><p style="color:#b9bbbe; font-size:14px; margin-bottom:20px;">جاري تطوير إعدادات هذا القسم لتكون مخصصة بالكامل.</p><a href="/dashboard" class="btn-discord" style="font-size:14px;">← العودة للسيرفرات</a></div></body></html>`);
+    let guildIcon = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
+
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>إدارة ${guild.name}</title><style>${commonStyle}</style></head><body><div class="glass-card"><img src="${guildIcon}" style="width:100px;height:100px;border-radius:50%;object-fit:cover;margin-bottom:15px;border:3px solid #FFD700;box-shadow: 0 6px 20px rgba(0,0,0,0.5);"><h2 style="color:#FFD700; margin-bottom:10px; font-size:24px;">${guild.name}</h2><p style="color:#b9bbbe; font-size:14px; margin-bottom:25px;">لوحة التحكم النشطة لإدارة الصلاحيات والأقسام بداخل السيرفر بكل سهولة.</p><div style="display:flex; gap:12px; justify-content:center;"><a href="/dashboard" class="btn-discord" style="font-size:14px; padding:10px 20px;">← العودة للسيرفرات</a></div></div></body></html>`);
 });
 
-// --- تنفيذ الأوامر ---
+// --- تنفيذ الأوامر داخل ديسكورد ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
@@ -317,4 +320,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم تعمل الآن بخلفية فخمة ومتطورة!'));
+app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم والأوامر تعمل الآن بكامل الكفاءة!'));
