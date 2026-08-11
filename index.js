@@ -8,7 +8,7 @@ const app = express();
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers, // ضروري جداً لميزة الترحيب
+        GatewayIntentBits.GuildMembers, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent 
     ] 
@@ -113,28 +113,42 @@ app.get('/', (req, res) => {
     `);
 });
 
+// --- صفحة عرض السيرفرات مع معالجة الأخطاء المحسنة ---
 app.get('/servers', (req, res) => {
-    if (!req.isAuthenticated()) return res.redirect('/login');
-    const adminServers = req.user.guilds.filter(g => (g.permissions & 0x8) === 0x8);
-    
-    let html = `
-        <div style="font-family: Arial; padding: 30px; background: #1a1a1a; color: white; min-height: 100vh;">
-            <h2>مرحباً، ${req.user.username}! اختر سيرفر للبدء في إدارته:</h2>
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px;">
-    `;
-    
-    adminServers.forEach(s => {
-        const iconUrl = s.icon ? `https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
-        html += `
-            <a href="/dashboard/${s.id}" style="background: #2f3136; padding: 15px; border-radius: 8px; text-decoration: none; color: white; width: 200px; text-align: center; display: inline-block;">
-                <img src="${iconUrl}" width="60" height="60" style="border-radius: 50%;"><br>
-                <h4 style="margin: 10px 0 0 0;">${s.name}</h4>
-            </a>
+    try {
+        if (!req.isAuthenticated()) return res.redirect('/login');
+        if (!req.user || !req.user.guilds) {
+            return res.send('خطأ: لم يتم جلب بيانات السيرفرات من ديسكورد. <a href="/logout">تسجيل الخروج والمحاولة مرة أخرى</a>');
+        }
+        
+        const adminServers = req.user.guilds.filter(g => (g.permissions & 0x8) === 0x8);
+        
+        let html = `
+            <div style="font-family: Arial; padding: 30px; background: #1a1a1a; color: white; min-height: 100vh;">
+                <h2>مرحباً، ${req.user.username}! اختر سيرفر للبدء في إدارته:</h2>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px;">
         `;
-    });
-    
-    html += `</div></div>`;
-    res.send(html);
+        
+        if (adminServers.length === 0) {
+            html += `<p style="color: #f04747;">لا توجد سيرفرات تمتلك فيها صلاحية الأدمن (Administrator) أو أن الصلاحيات لم تُقرأ بشكل صحيح.</p>`;
+        }
+
+        adminServers.forEach(s => {
+            const iconUrl = s.icon ? `https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
+            html += `
+                <a href="/dashboard/${s.id}" style="background: #2f3136; padding: 15px; border-radius: 8px; text-decoration: none; color: white; width: 200px; text-align: center; display: inline-block;">
+                    <img src="${iconUrl}" width="60" height="60" style="border-radius: 50%;"><br>
+                    <h4 style="margin: 10px 0 0 0;">${s.name}</h4>
+                </a>
+            `;
+        });
+        
+        html += `</div></div>`;
+        res.send(html);
+    } catch (err) {
+        console.log("Error in /servers route:", err);
+        res.send(`حدث خطأ داخلي في السيرفر: ${err.message}`);
+    }
 });
 
 app.get('/dashboard/:guildId', (req, res) => {
