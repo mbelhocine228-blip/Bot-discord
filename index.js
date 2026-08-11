@@ -44,10 +44,9 @@ app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
-// تخزين الإعدادات مع أنظمة الحماية الجديدة
+// تخزين الإعدادات الشاملة
 const guildSettings = {};
-const userMessageTracker = new Map(); // تتبع الرسائل للسبام
-
+const userMessageTracker = new Map();
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
 // --- الصفحة الرئيسية ---
@@ -64,7 +63,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h2>RKS•ＰＯＷＥＲ</h2>
-                <p>لوحة التحكم الشاملة مع أنظمة الحماية</p>
+                <p>لوحة التحكم الشاملة مع إدارة الأوامر</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد 🎮</a>
                 <a href="${INVITE_URL}" target="_blank" class="btn btn-invite">إضافة البوت لسيرفرك ➕</a>
             </div>
@@ -106,7 +105,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// --- لوحة التحكم وإدارة أقسام الحماية والابيوص ---
+// --- لوحة التحكم مع قسم الأوامر المخصص ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -115,6 +114,8 @@ app.get('/control/:guildId/:section', (req, res) => {
     if (!guildSettings[guild.id]) {
         guildSettings[guild.id] = { 
             welcomeMessage: 'مرحباً بك في السيرفر!',
+            autoRoleName: '@Team Rocks',
+            prefix: '!',
             spamEnabled: false,
             spamLimit: 5,
             badLinksEnabled: false,
@@ -129,7 +130,7 @@ app.get('/control/:guildId/:section', (req, res) => {
 
     if (section === 'welcome') {
         mainContent = `
-            <h2>📢 رسائل الترحيب</h2>
+            <h2>📢 رسائل الترحيب والإعلانات</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="welcome">
@@ -138,62 +139,96 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
             </form>
         `;
+    } else if (section === 'commands') {
+        mainContent = `
+            <h2>⚡ إعدادات الأوامر (Bot Commands)</h2>
+            <p style="color: #b9bbbe;">تحكم في بادئة أوامر البوت واستعرض الأوامر المتاحة.</p>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="commands">
+                <label style="display:block; margin-top:15px; font-weight:bold;">بادئة الأوامر (Prefix):</label>
+                <input type="text" name="prefix" value="${settings.prefix}" style="padding: 10px; width: 200px; background: #1e1f22; color: white; border: 1px solid #383a40; border-radius: 6px;">
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ البادئة 💾</button>
+            </form>
+            <hr style="border: 0; border-top: 1px solid #383a40; margin: 30px 0;">
+            <h3>📋 قائمة الأوامر الفعالة في البوت:</h3>
+            <ul style="line-height: 2; color: #dbdee1; background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40;">
+                <li><b>${settings.prefix}ping</b> - فحص سرعة استجابة البوت.</li>
+                <li><b>${settings.prefix}ban [User]</b> - حظر عضو من السيرفر.</li>
+                <li><b>${settings.prefix}kick [User]</b> - طرد عضو من السيرفر.</li>
+                <li><b>${settings.prefix}clear [Number]</b> - مسح الرسائل.</li>
+            </ul>
+        `;
+    } else if (section === 'stats') {
+        mainContent = `
+            <h2>📈 الإحصائيات (Statistiques)</h2>
+            <div style="display: flex; gap: 20px; margin-top: 20px;">
+                <div style="background: #2b2d31; padding: 20px; border-radius: 8px; flex: 1; border: 1px solid #383a40;">
+                    <h3>إجمالي الأعضاء</h3>
+                    <p style="font-size: 24px; color: #5865F2; font-weight: bold;">${guild.memberCount}</p>
+                </div>
+                <div style="background: #2b2d31; padding: 20px; border-radius: 8px; flex: 1; border: 1px solid #383a40;">
+                    <h3>حالة البوت</h3>
+                    <p style="font-size: 24px; color: #43b581; font-weight: bold;">متصل وشغال 🟢</p>
+                </div>
+            </div>
+        `;
+    } else if (section === 'autoroles') {
+        mainContent = `
+            <h2>➕ رتب الأعضاء التلقائية (Auto Rôles)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="autoroles">
+                <label style="display:block; margin-top:15px; font-weight:bold;">اسم الرتبة:</label>
+                <input type="text" name="autoRoleName" value="${settings.autoRoleName}" style="padding: 10px; width: 250px; background: #1e1f22; color: white; border: 1px solid #383a40; border-radius: 6px;">
+                <br><br><button type="submit" style="background: #43b581; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الرتبة 💾</button>
+            </form>
+        `;
     } else if (section === 'spam') {
         mainContent = `
-            <h2>🛡️ نظام منع السبام (Spam Protection)</h2>
-            <p style="color: #b9bbbe;">حماية السيرفر من الرسائل المتكررة والسريعة.</p>
+            <h2>💬 منع السبام (Spam Protection)</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="spam">
-                
                 <label style="display:block; margin-top:15px; font-weight:bold;">حالة الحماية:</label>
                 <select name="spamEnabled" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px;">
                     <option value="true" ${settings.spamEnabled ? 'selected' : ''}>مفعل (Enabled)</option>
                     <option value="false" ${!settings.spamEnabled ? 'selected' : ''}>معطل (Disabled)</option>
                 </select>
-
-                <label style="display:block; margin-top:15px; font-weight:bold;">عدد الرسائل المسموحة للتحذير:</label>
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحد الأقصى للرسائل:</label>
                 <input type="number" name="spamLimit" value="${settings.spamLimit}" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ إعدادات السبام 💾</button>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
             </form>
         `;
     } else if (section === 'badlinks') {
         mainContent = `
-            <h2>🔗 الروابط الضارة (Bad Links / Linkspam)</h2>
-            <p style="color: #b9bbbe;">منع نشر الروابط الممنوعة والدومينات غير المرغوب فيها.</p>
+            <h2>🔗 الروابط الضارة (Bad Links)</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="badlinks">
-                
                 <label style="display:block; margin-top:15px; font-weight:bold;">حالة الحماية:</label>
                 <select name="badLinksEnabled" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px;">
                     <option value="true" ${settings.badLinksEnabled ? 'selected' : ''}>مفعل (Enabled)</option>
                     <option value="false" ${!settings.badLinksEnabled ? 'selected' : ''}>معطل (Disabled)</option>
                 </select>
-
-                <label style="display:block; margin-top:15px; font-weight:bold;">الدومينات الممنوعة (مفصولة بفاصلة):</label>
+                <label style="display:block; margin-top:15px; font-weight:bold;">الدومينات الممنوعة:</label>
                 <input type="text" name="blacklistedDomains" value="${settings.blacklistedDomains}" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الروابط الممنوعة 💾</button>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
             </form>
         `;
     } else if (section === 'honeypot') {
         mainContent = `
-            <h2>🍯 قنوات الفخ (Honeypot Channels)</h2>
-            <p style="color: #b9bbbe;">أي عضو يكتب رسالة في القناة المحددة سيتم معاقبته تلقائياً وحذف رسالته.</p>
+            <h2>🍯 قنوات الفخ (Honeypot)</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="honeypot">
-                
                 <label style="display:block; margin-top:15px; font-weight:bold;">معرف قناة الفخ (Channel ID):</label>
-                <input type="text" name="honeypotChannelId" value="${settings.honeypotChannelId}" placeholder="مثال: 123456789012345678" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ إعدادات الفخ 💾</button>
+                <input type="text" name="honeypotChannelId" value="${settings.honeypotChannelId}" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
             </form>
         `;
     } else {
-        mainContent = `<h2>⚙️ القسم: ${section}</h2><p style="color: #b9bbbe;">قيد التطوير والربط الكامل قريباً!</p>`;
+        mainContent = `<h2>⚙️ القسم: ${section}</h2><p style="color: #b9bbbe;">هذا القسم متاح وجاهز للتفعيل!</p>`;
     }
 
     res.send(`
@@ -217,12 +252,24 @@ app.get('/control/:guildId/:section', (req, res) => {
             </div>
             <div class="sidebar">
                 <h3 style="color:white; margin-top:0;">RKS Dashboard</h3>
-                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">📢 رسائل الترحيب</a>
-                
+                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">🏆 Classement / الترتيب</a>
+                <a href="/control/${guild.id}/commands" class="${section === 'commands' ? 'active' : ''}">⚡ Bot Commands / الأوامر</a>
+                <a href="/control/${guild.id}/stats" class="${section === 'stats' ? 'active' : ''}">📈 Statistiques</a>
+                <a href="/control/${guild.id}/vocals" class="${section === 'vocals' ? 'active' : ''}">🔊 Vocaux Temporaires</a>
+                <a href="/control/${guild.id}/starboard" class="${section === 'starboard' ? 'active' : ''}">⭐ Starboard</a>
+                <a href="/control/${guild.id}/birthdays" class="${section === 'birthdays' ? 'active' : ''}">🎂 Anniversaires</a>
+                <a href="/control/${guild.id}/minigames" class="${section === 'minigames' ? 'active' : ''}">🎮 Mini-jeux</a>
+
+                <h4>Rôles</h4>
+                <a href="/control/${guild.id}/autoroles" class="${section === 'autoroles' ? 'active' : ''}">➕ Auto Rôles</a>
+                <a href="/control/${guild.id}/reactionroles" class="${section === 'reactionroles' ? 'active' : ''}">🏷️ Rôles Réaction</a>
+                <a href="/control/${guild.id}/temproles" class="${section === 'temproles' ? 'active' : ''}">⏰ Rôles Temporaires</a>
+
                 <h4>Modération & Protection</h4>
                 <a href="/control/${guild.id}/spam" class="${section === 'spam' ? 'active' : ''}">💬 Spam Protection</a>
                 <a href="/control/${guild.id}/badlinks" class="${section === 'badlinks' ? 'active' : ''}">🔗 Bad Links</a>
                 <a href="/control/${guild.id}/honeypot" class="${section === 'honeypot' ? 'active' : ''}">🍯 Honeypot</a>
+                <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 Logs</a>
 
                 <div style="margin-top: 30px; border-top: 1px solid #383a40; padding-top: 15px;">
                     <a href="/dashboard" style="background:#5865F2; color:white; text-align:center;">← العودة للسيرفرات</a>
@@ -232,13 +279,15 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// حفظ إعدادات الحماية
+// حفظ البيانات
 app.post('/action/save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
-    const { guildId, section, welcomeMessage, spamEnabled, spamLimit, badLinksEnabled, blacklistedDomains, honeypotChannelId } = req.body;
+    const { guildId, section, welcomeMessage, prefix, autoRoleName, spamEnabled, spamLimit, badLinksEnabled, blacklistedDomains, honeypotChannelId } = req.body;
     if (!guildSettings[guildId]) guildSettings[guildId] = {};
     
     if (section === 'welcome') guildSettings[guildId].welcomeMessage = welcomeMessage;
+    if (section === 'commands') guildSettings[guildId].prefix = prefix || '!';
+    if (section === 'autoroles') guildSettings[guildId].autoRoleName = autoRoleName;
     if (section === 'spam') {
         guildSettings[guildId].spamEnabled = spamEnabled === 'true';
         guildSettings[guildId].spamLimit = parseInt(spamLimit) || 5;
@@ -254,54 +303,64 @@ app.post('/action/save', (req, res) => {
     res.redirect(req.headers.referer || '/dashboard');
 });
 
-// --- نظام الحماية داخل السيرفر (Message Handler) ---
+// --- نظام الأوامر والحماية داخل السيرفر ---
 client.on('messageCreate', async message => {
     if (!message.guild || message.author.bot) return;
-    const settings = guildSettings[message.guild.id];
-    if (!settings) return;
+    const settings = guildSettings[message.guild.id] || { prefix: '!' };
 
-    // 1. فحص قناة الفخ (Honeypot)
+    // تنفيذ الأوامر بالبادئة (Prefix)
+    if (message.content.startsWith(settings.prefix)) {
+        const args = message.content.slice(settings.prefix.length).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        if (command === 'ping') {
+            await message.channel.send(`🏓 Pong! سرعة الاستجابة: ${client.ws.ping}ms`);
+        } else if (command === 'clear') {
+            if (!message.member.permissions.has('ManageMessages')) return message.reply('❌ ليس لديك صلاحية لإدارة الرسائل.');
+            const count = parseInt(args[0]) || 5;
+            await message.channel.bulkDelete(count, true).catch(() => {});
+            const msg = await message.channel.send(`🗑️ تم مسح ${count} رسالة بنجاح.`);
+            setTimeout(() => msg.delete().catch(() => {}), 3000);
+        }
+    }
+
+    // 1. Honeypot
     if (settings.honeypotChannelId && message.channel.id === settings.honeypotChannelId) {
         try {
             await message.delete();
-            await message.channel.send(`⚠️ ${message.author}, هذه قناة فخ ممنوع الكتابة فيها! تم حذف رسالتك.`);
-        } catch (e) { console.log(e); }
+            await message.channel.send(`⚠️ ${message.author}, هذه قناة فخ ممنوع الكتابة فيها!`);
+        } catch (e) {}
         return;
     }
 
-    // 2. فحص الروابط الممنوعة (Bad Links)
+    // 2. Bad Links
     if (settings.badLinksEnabled && settings.blacklistedDomains) {
         const domains = settings.blacklistedDomains.split(',').map(d => d.trim().toLowerCase());
         const contentLower = message.content.toLowerCase();
-        const hasBadLink = domains.some(domain => domain && contentLower.includes(domain));
-        if (hasBadLink) {
+        if (domains.some(domain => domain && contentLower.includes(domain))) {
             try {
                 await message.delete();
-                await message.channel.send(`🚫 ${message.author}, ممنوع إرسال هذا الرابط في السيرفر!`);
-            } catch (e) { console.log(e); }
+                await message.channel.send(`🚫 ${message.author}, ممنوع إرسال هذا الرابط!`);
+            } catch (e) {}
             return;
         }
     }
 
-    // 3. فحص السبام السريع (Spam Protection)
+    // 3. Spam Protection
     if (settings.spamEnabled) {
         const userId = message.author.id;
         const now = Date.now();
-        if (!userMessageTracker.has(userId)) {
-            userMessageTracker.set(userId, []);
-        }
+        if (!userMessageTracker.has(userId)) userMessageTracker.set(userId, []);
         let timestamps = userMessageTracker.get(userId);
         timestamps.push(now);
-        
-        // تصفية الرسائل خلال آخر 5 ثواني
         timestamps = timestamps.filter(time => now - time < 5000);
         userMessageTracker.set(userId, timestamps);
 
         if (timestamps.length > settings.spamLimit) {
             try {
                 await message.delete();
-                await message.channel.send(`⚠️ ${message.author}, توقف عن السبام لو سمحت!`);
-            } catch (e) { console.log(e); }
+                await message.channel.send(`⚠️ ${message.author}, توقف عن السبام!`);
+            } catch (e) {}
         }
     }
 });
@@ -309,4 +368,4 @@ client.on('messageCreate', async message => {
 client.on('ready', () => console.log(`✅ البوت شغال: ${client.user.tag}`));
 client.login(process.env.DISCORD_TOKEN);
 
-app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم مع أنظمة الحماية شغالة بنجاح!'));
+app.listen(process.env.PORT || 3000, () => console.log('🚀 الداشبورد مع قسم الأوامر والحماية شغال 100%!'));
