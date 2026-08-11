@@ -48,17 +48,17 @@ const guildSettings = {};
 const sentRacingMasterNews = new Set();
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// --- تسجيل أوامر السلاش (Slash Commands) تلقائياً ---
+// --- تسجيل أوامر السلاش (Slash Commands) ---
 const commands = [
-    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو المراد حظره').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو المراد طرده').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('mute').setDescription('كتم عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
     new SlashCommandBuilder().setName('unmute').setDescription('فك الكتم عن عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(opt => opt.setName('count').setDescription('عدد الرسائل')),
-    new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
+    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(opt => opt.setName('count').setDescription('العدد')),
+    new SlashCommandBuilder().setName('ping').setDescription('فحص السرعة'),
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
-    new SlashCommandBuilder().setName('ann').setDescription('إعلان رسمي').addStringOption(opt => opt.setName('text').setDescription('نص الإعلان').setRequired(true))
+    new SlashCommandBuilder().setName('ann').setDescription('إعلان رسمي').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true))
 ].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -66,10 +66,8 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل أوامر السلاش (Slash Commands) بنجاح.');
-    } catch (error) {
-        console.error(error);
-    }
+        console.log('🔄 تم تسجيل أوامر السلاش بنجاح.');
+    } catch (error) { console.error(error); }
 });
 
 // --- الصفحة الرئيسية ---
@@ -128,7 +126,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// --- لوحة التحكم والتفاصيل ---
+// --- لوحة التحكم الكاملة بكل الأقسام والحقول ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -147,79 +145,144 @@ app.get('/control/:guildId/:section', (req, res) => {
             spamEnabled: false,
             spamLimit: 5,
             badLinksEnabled: false,
-            blacklistedDomains: 'discord.gg, t.me'
+            blacklistedDomains: 'discord.gg, t.me',
+            logsChannelId: ''
         };
     }
     const s = guildSettings[guild.id];
     const section = req.params.section;
     let mainContent = '';
 
-    // توليد قائمة الرومات لاختيار روم الأخبار
-    let channelsOptions = '<option value="">-- اختر روم الأخبار --</option>';
+    // رومات النص للأخبار والسجلات
+    let textChannelsOptions = '<option value="">-- اختر الروم --</option>';
     guild.channels.cache.forEach(c => {
-        if (c.type === 0) { // Text Channel
-            channelsOptions += `<option value="${c.id}" ${s.racingMasterChannelId === c.id ? 'selected' : ''}>#${c.name}</option>`;
+        if (c.type === 0) {
+            textChannelsOptions += `<option value="${c.id}">#${c.name}</option>`;
         }
     });
 
     if (section === 'commands') {
         mainContent = `
-            <h2>⚡ الأوامر المتاحة للبوت (أوامر سلاش /)</h2>
-            <p>أوامر البوت تعمل مباشرة عبر كتابة رمز <code>/</code> في أي روم داخل سيرفرك:</p>
+            <h2>⚡ أوامر البوت (أوامر سلاش /)</h2>
+            <p>أوامر البوت متكاملة وتعمل مباشرة عبر كتابة رمز <code>/</code> في شات السيرفر:</p>
             <div style="background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40; max-height: 450px; overflow-y: auto; line-height: 1.8;">
                 <p><b>🛡️ أوامر الإدارة:</b><br>
-                • <code>/ban</code> - حظر عضو من السيرفر مع سبب.<br>
-                • <code>/unban</code> - فك الحظر بواسطة الآيدي.<br>
+                • <code>/ban</code> - حظر عضو مع السبب.<br>
+                • <code>/unban</code> - فك الحظر بالآيدي.<br>
                 • <code>/kick</code> - طرد عضو.<br>
-                • <code>/mute</code> - كتم عضو.<br>
+                • <code>/mute</code> - كتم العضو.<br>
                 • <code>/unmute</code> - فك الكتم.<br>
                 • <code>/clear</code> - مسح الرسائل بسرعة.</p>
-                <p><b>📢 أوامر التفاعل:</b><br>
-                • <code>/say</code> - تكرار الكلام.<br>
+                <p><b>📢 أوامر التفاعل والنشر:</b><br>
+                • <code>/say</code> - تكرار النص.<br>
                 • <code>/ann</code> - إرسال إعلان رسمي مع منشن عام.<br>
                 • <code>/ping</code> - فحص سرعة الاستجابة.</p>
             </div>
         `;
     } else if (section === 'racingmaster') {
+        let rmChannels = '<option value="">-- اختر روم الأخبار --</option>';
+        guild.channels.cache.forEach(c => {
+            if (c.type === 0) {
+                rmChannels += `<option value="${c.id}" ${s.racingMasterChannelId === c.id ? 'selected' : ''}>#${c.name}</option>`;
+            }
+        });
         mainContent = `<h2>🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="racingmaster">
                 <label style="display:block; margin-bottom:8px; font-weight:bold;">حالة النشر التلقائي:</label>
                 <select name="racingMasterNewsEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                    <option value="true" ${s.racingMasterNewsEnabled ? 'selected' : ''}>✅ مفعل (كل 20 دقيقة)</option>
+                    <option value="true" ${s.racingMasterNewsEnabled ? 'selected' : ''}>✅ مفعل</option>
                     <option value="false" ${!s.racingMasterNewsEnabled ? 'selected' : ''}>❌ معطل</option>
                 </select><br><br>
-                <label style="display:block; margin-bottom:8px; font-weight:bold;">اختر الروم المخصص لنشر الأخبار:</label>
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">اختر الروم لنشر الأخبار فيه:</label>
                 <select name="racingMasterChannelId" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                    ${channelsOptions}
+                    ${rmChannels}
                 </select><br><br>
                 <button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer;">حفظ الإعدادات 💾</button>
             </form>`;
     } else if (section === 'stats') {
-        mainContent = `<h2>📈 الإحصائيات</h2><p>أعضاء السيرفر: <b>${guild.memberCount}</b></p>`;
+        mainContent = `<h2>📈 الإحصائيات (Statistiques)</h2>
+            <p>• إجمالي أعضاء السيرفر: <b>${guild.memberCount}</b></p>
+            <p>• إجمالي الرومات: <b>${guild.channels.cache.size}</b></p>`;
     } else if (section === 'vocaux') {
-        mainContent = `<h2>🎙️ الرومات الصوتية المؤقتة</h2><p>قريباً تفعيل الإعدادات.</p>`;
+        mainContent = `<h2>🎙️ الرومات الصوتية المؤقتة</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="vocaux">
+                <select name="vocauxEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px;">
+                    <option value="true" ${s.vocauxEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.vocauxEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br><button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'starboard') {
-        mainContent = `<h2>⭐ لوحة النجوم</h2><p>قريباً تفعيل الإعدادات.</p>`;
+        mainContent = `<h2>⭐ لوحة النجوم (Starboard)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="starboard">
+                <select name="starboardEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px;">
+                    <option value="true" ${s.starboardEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.starboardEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br><button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'anniversaires') {
-        mainContent = `<h2>🎂 أعياد الميلاد</h2><p>قريباً تفعيل الإعدادات.</p>`;
+        mainContent = `<h2>🎂 أعياد الميلاد (Anniversaires)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="anniversaires">
+                <select name="anniversairesEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px;">
+                    <option value="true" ${s.anniversairesEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.anniversairesEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br><button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'minijeux') {
-        mainContent = `<h2>🎮 الألعاب المصغرة</h2><p>قريباً تفعيل الإعدادات.</p>`;
+        mainContent = `<h2>🎮 الألعاب المصغرة (Mini-jeux)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="minijeux">
+                <select name="minijeuxEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px;">
+                    <option value="true" ${s.minijeuxEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.minijeuxEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br><button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'autoroles') {
-        mainContent = `<h2>➕ الرتب التلقائية</h2><p>إدارة الرتب.</p>`;
+        mainContent = `<h2>➕ الرتب التلقائية (Auto Rôles)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="autoroles">
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">اسم الرتبة التلقائية عند دخول العضو:</label>
+                <input type="text" name="autoRoleName" value="${s.autoRoleName}" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;"><br><br>
+                <button type="submit" style="background:#43b581; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ الرتبة 💾</button>
+            </form>`;
     } else if (section === 'rolesreaction') {
-        mainContent = `<h2>🎭 رتب التفاعل</h2>`;
+        mainContent = `<h2>🎭 رتب التفاعل (Rôles Réaction)</h2><p>إدارة رتب الأزرار والتفاعلات بكل سهولة.</p>`;
     } else if (section === 'rolestemporaires') {
-        mainContent = `<h2>⏰ الرتب المؤقتة</h2>`;
+        mainContent = `<h2>⏰ الرتب المؤقتة (Rôles Temporaires)</h2><p>إدارة تعيين وإزالة الرتب بمدة زمنية.</p>`;
     } else if (section === 'spam') {
-        mainContent = `<h2>💬 حماية السبام</h2>`;
+        mainContent = `<h2>💬 حماية السبام (Spam Protection)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="spam">
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">حالة حماية السبام:</label>
+                <select name="spamEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${s.spamEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.spamEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br>
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">الحد الأقصى للرسائل المتكررة:</label>
+                <input type="number" name="spamLimit" value="${s.spamLimit}" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;"><br><br>
+                <button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'badlinks') {
-        mainContent = `<h2>🔗 الروابط الضارة</h2>`;
+        mainContent = `<h2>🔗 الروابط الضارة (Bad Links)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}"><input type="hidden" name="section" value="badlinks">
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">حالة حظر الروابط:</label>
+                <select name="badLinksEnabled" style="padding:10px; width:250px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${s.badLinksEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!s.badLinksEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select><br><br>
+                <label style="display:block; margin-bottom:8px; font-weight:bold;">الدومينات المحظورة:</label>
+                <input type="text" name="blacklistedDomains" value="${s.blacklistedDomains}" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;"><br><br>
+                <button type="submit" style="background:#5865F2; color:white; padding:10px 20px; border:none; border-radius:6px; font-weight:bold;">حفظ 💾</button>
+            </form>`;
     } else if (section === 'honeypot') {
-        mainContent = `<h2>🍯 نظام Honeypot</h2>`;
+        mainContent = `<h2>🍯 نظام Honeypot</h2><p>رصد ومكافحة الحسابات الوهمية والاختراقات التلقائية.</p>`;
     } else if (section === 'logs') {
-        mainContent = `<h2>📋 السجلات</h2>`;
+        mainContent = `<h2>📋 السجلات (Logs)</h2><p>مراقبة وتتبع كافة الأحداث داخل السيرفر.</p>`;
     }
 
     res.send(`
@@ -267,10 +330,14 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// --- حفظ الإعدادات ---
+// --- معالجة حفظ الإعدادات بالكامل ---
 app.post('/action/save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
-    const { guildId, section, racingMasterNewsEnabled, racingMasterChannelId } = req.body;
+    const { 
+        guildId, section, racingMasterNewsEnabled, racingMasterChannelId,
+        vocauxEnabled, starboardEnabled, anniversairesEnabled, minijeuxEnabled,
+        autoRoleName, spamEnabled, spamLimit, badLinksEnabled, blacklistedDomains 
+    } = req.body;
     
     if (!guildSettings[guildId]) guildSettings[guildId] = {};
     const s = guildSettings[guildId];
@@ -279,11 +346,18 @@ app.post('/action/save', (req, res) => {
         s.racingMasterNewsEnabled = racingMasterNewsEnabled === 'true';
         s.racingMasterChannelId = racingMasterChannelId || '';
     }
+    if (section === 'vocaux') s.vocauxEnabled = vocauxEnabled === 'true';
+    if (section === 'starboard') s.starboardEnabled = starboardEnabled === 'true';
+    if (section === 'anniversaires') s.anniversairesEnabled = anniversairesEnabled === 'true';
+    if (section === 'minijeux') s.minijeuxEnabled = minijeuxEnabled === 'true';
+    if (section === 'autoroles') s.autoRoleName = autoRoleName;
+    if (section === 'spam') { s.spamEnabled = spamEnabled === 'true'; s.spamLimit = parseInt(spamLimit) || 5; }
+    if (section === 'badlinks') { s.badLinksEnabled = badLinksEnabled === 'true'; s.blacklistedDomains = blacklistedDomains; }
 
     res.redirect(req.headers.referer || '/dashboard');
 });
 
-// --- نظام أخبار Racing Master التلقائي (الروم المخصص) ---
+// --- نظام أخبار Racing Master التلقائي في الروم المحدد ---
 setInterval(() => {
     client.guilds.cache.forEach(async guild => {
         const s = guildSettings[guild.id];
@@ -311,10 +385,10 @@ setInterval(() => {
     });
 }, 20 * 60 * 1000);
 
-// --- معالجة أوامر السلاش (Slash Commands) داخل ديسكورد ---
+// --- معالجة أوامر السلاش داخل ديسكورد ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
-    const { commandName, options, guild, member } = interaction;
+    const { commandName, options, member } = interaction;
 
     if (commandName === 'ban') {
         if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: '❌ ليس لديك صلاحية حظر الأعضاء.', ephemeral: true });
