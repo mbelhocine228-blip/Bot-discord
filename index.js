@@ -8,25 +8,20 @@ const app = express();
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers, // ضروري جداً لكي يعمل الترحيب بالأعضاء الجدد
+        GatewayIntentBits.GuildMembers, 
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent 
     ] 
 });
 
-// --- 1. إعدادات الموقع ولوحة التحكم (Dashboard & Auth) ---
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ 
-    secret: 'rks-power-secret-key-99', 
-    resave: false, 
-    saveUninitialized: false 
-}));
+app.use(session({ secret: 'rks-power-secret-key-99', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
 
 passport.use(new DiscordStrategy({
-    clientID: 'YOUR_CLIENT_ID',         // ضع Client ID هنا
-    clientSecret: 'YOUR_CLIENT_SECRET', // ضع Client Secret هنا
+    clientID: 'YOUR_CLIENT_ID',         
+    clientSecret: 'YOUR_CLIENT_SECRET', 
     callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => done(null, profile)));
@@ -108,59 +103,18 @@ app.post('/send-announcement', async (req, res) => {
     res.send(`<script>alert('تم إرسال الإعلان بنجاح!'); window.location.href='/dashboard/${guildId}';</script>`);
 });
 
-
-// --- 2. إعداد أوامر البوت والأدوات والإدارة ---
 const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
-    
-    new SlashCommandBuilder()
-        .setName('say')
-        .setDescription('يجعل البوت يكرر رسالتك')
-        .addStringOption(opt => opt.setName('message').setDescription('الرسالة').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('ann')
-        .setDescription('نشر إعلان رسمي من البوت')
-        .addStringOption(opt => opt.setName('text').setDescription('نص الإعلان').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('avatar')
-        .setDescription('عرض صورة بروفايلك أو بروفايل عضو آخر')
-        .addUserOption(opt => opt.setName('user').setDescription('العضو المراد جلب صورته').setRequired(false)),
-
-    new SlashCommandBuilder()
-        .setName('clear')
-        .setDescription('مسح عدد معين من الرسائل')
-        .addIntegerOption(opt => opt.setName('count').setDescription('عدد الرسائل (من 1 إلى 100)').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('ban')
-        .setDescription('حظر عضو من السيرفر')
-        .addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true))
-        .addStringOption(opt => opt.setName('reason').setDescription('السبب').setRequired(false)),
-
-    new SlashCommandBuilder()
-        .setName('unban')
-        .setDescription('إلغاء حظر عضو بواسطة الآيدي (ID)')
-        .addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('طرد عضو من السيرفر')
-        .addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('mute')
-        .setDescription('إسكات (ميوت) عضو مؤقتاً')
-        .addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true))
-        .addIntegerOption(opt => opt.setName('minutes').setDescription('المدة بالدقائق').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('unmute')
-        .setDescription('إلغاء الميوت عن عضو')
-        .addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)),
-
-    new SlashCommandBuilder().setName('help').setDescription('عرض قائمة الأوامر المتاحة')
+    new SlashCommandBuilder().setName('say').setDescription('يجعل البوت يكرر رسالتك').addStringOption(opt => opt.setName('message').setDescription('الرسالة').setRequired(true)),
+    new SlashCommandBuilder().setName('ann').setDescription('نشر إعلان رسمي من البوت').addStringOption(opt => opt.setName('text').setDescription('نص الإعلان').setRequired(true)),
+    new SlashCommandBuilder().setName('avatar').setDescription('عرض صورة بروفايلك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(false)),
+    new SlashCommandBuilder().setName('clear').setDescription('مسح عدد معين من الرسائل').addIntegerOption(opt => opt.setName('count').setDescription('العدد').setRequired(true)),
+    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو').addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب').setRequired(false)),
+    new SlashCommandBuilder().setName('unban').setDescription('إلغاء حظر عضو بالآيدي').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('mute').setDescription('ميوت مؤقت').addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)).addIntegerOption(opt => opt.setName('minutes').setDescription('بالدقائق').setRequired(true)),
+    new SlashCommandBuilder().setName('unmute').setDescription('رفع الميوت').addUserOption(opt => opt.setName('target').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('help').setDescription('قائمة الأوامر')
 ].map(c => c.toJSON());
 
 client.once('ready', async () => {
@@ -168,29 +122,24 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('تم تحديث جميع الأوامر بنجاح!');
     } catch (e) { console.error(e); }
 });
 
-// --- ميزة الترحيب بالأعضاء الجدد (Welcome Message) ---
 client.on('guildMemberAdd', async member => {
-    // يبحث عن قناة اسمها welcome أو أول قناة نصية متاحة للإرسال فيها
     const welcomeChannel = member.guild.channels.cache.find(c => c.name.includes('welcome') || c.name.includes('الترحيب')) || 
                            member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has('SendMessages'));
-    
     if (!welcomeChannel) return;
 
     const embed = new EmbedBuilder()
         .setColor(0x00FF00)
         .setTitle('🎉 عضو جديد انضم إلينا!')
-        .setDescription(`أهلاً بك يا ${member} في سيرفر **${member.guild.name}**! نورتنا وشرفت، نتمنى لك وقتاً ممتعاً معنا. 🚀`)
+        .setDescription(`أهلاً بك يا ${member} في سيرفر **${member.guild.name}**! نورتنا وشرفت. 🚀`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setTimestamp();
 
     await welcomeChannel.send({ embeds: [embed] });
 });
 
-// --- تنفيذ الأوامر ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
@@ -206,7 +155,7 @@ client.on('interactionCreate', async interaction => {
     }
     else if (commandName === 'ann') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) 
-            return interaction.reply({ content: 'هذا الأمر مخصص للإدارة فقط!', ephemeral: true });
+            return interaction.reply({ content: 'للإدارة فقط!', ephemeral: true });
         const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('📢 إعلان رسمي').setDescription(interaction.options.getString('text')).setTimestamp();
         await interaction.reply({ content: 'تم نشر الإعلان بنجاح 📢', ephemeral: true });
         await interaction.channel.send({ embeds: [embed] });
@@ -217,72 +166,47 @@ client.on('interactionCreate', async interaction => {
     }
     else if (commandName === 'clear') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) 
-            return interaction.reply({ content: 'ليس لديك صلاحية لإدارة الرسائل!', ephemeral: true });
+            return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
         const count = interaction.options.getInteger('count');
-        if (count < 1 || count > 100) return interaction.reply({ content: 'الرجاء اختيار عدد بين 1 و 100.', ephemeral: true });
         await interaction.channel.bulkDelete(count, true);
         await interaction.reply({ content: `تم مسح ${count} رسالة بنجاح 🧹`, ephemeral: true });
     }
     else if (commandName === 'ban') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) 
-            return interaction.reply({ content: 'ليس لديك صلاحية لحظر الأعضاء!', ephemeral: true });
+            return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
         const target = interaction.options.getMember('target');
         const reason = interaction.options.getString('reason') || 'بدون سبب';
-        if (!target.bannable) return لا يمكنني حظر هذا العضو; // للتبسيط
         await target.ban({ reason });
-        await interaction.reply({ content: `تم حظر ${target.user.tag} بنجاح. السبب: ${reason} 🔨` });
+        await interaction.reply({ content: `تم حظر ${target.user.tag} بنجاح. 🔨` });
     }
     else if (commandName === 'unban') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) 
             return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
-        const userId = interaction.options.getString('userid');
-        try {
-            await interaction.guild.members.unban(userId);
-            await interaction.reply({ content: `تم رفع الحظر عن العضو بنجاح ✅` });
-        } catch {
-            await interaction.reply({ content: `تعسّر العثور على العضو أو لم يكن محظوراً.`, ephemeral: true });
-        }
+        await interaction.guild.members.unban(interaction.options.getString('userid'));
+        await interaction.reply({ content: `تم رفع الحظر بنجاح ✅` });
     }
     else if (commandName === 'kick') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.KickMembers)) 
-            return interaction.reply({ content: 'ليس لديك صلاحية لطرد الأعضاء!', ephemeral: true });
+            return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
         const target = interaction.options.getMember('target');
-        if (!target.kickable) return interaction.reply({ content: 'لا يمكنني طرد هذا العضو!', ephemeral: true });
         await target.kick();
-        await interaction.reply({ content: `تم طرد ${target.user.tag} من السيرفر 👢` });
+        await interaction.reply({ content: `تم طرد ${target.user.tag} 👢` });
     }
     else if (commandName === 'mute') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) 
-            return interaction.reply({ content: 'ليس لديك صلاحية لإسكات الأعضاء!', ephemeral: true });
+            return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
         const target = interaction.options.getMember('target');
-        const minutes = interaction.options.getInteger('minutes');
-        try {
-            await target.timeout(minutes * 60 * 1000, 'ميوت إداري');
-            await interaction.reply({ content: `تم إعطاء ميوت لـ ${target.user.tag} لمدة ${minutes} دقائق 🔇` });
-        } catch {
-            await interaction.reply({ content: 'فشل في تطبيق الميوت.', ephemeral: true });
-        }
+        await target.timeout(interaction.options.getInteger('minutes') * 60 * 1000, 'ميوت إداري');
+        await interaction.reply({ content: `تم إعطاء ميوت لـ ${target.user.tag} 🔇` });
     }
     else if (commandName === 'unmute') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) 
             return interaction.reply({ content: 'ليس لديك صلاحية!', ephemeral: true });
-        const target = interaction.options.getMember('target');
-        try {
-            await target.timeout(null);
-            await interaction.reply({ content: `تم رفع الميوت عن ${target.user.tag} 🔊` });
-        } catch {
-            await interaction.reply({ content: 'فشل في إزالة الميوت.', ephemeral: true });
-        }
+        await interaction.options.getMember('target').timeout(null);
+        await interaction.reply({ content: `تم رفع الميوت 🔊` });
     }
     else if (commandName === 'help') {
-        await interaction.reply({ 
-            content: '🛠️ **قائمة أوامر RKS•ＰＯＷＥＲ الاحترافية:**\n' +
-                     '🔹 `/say` - تكرار رسالة\n🔹 `/ann` - نشر إعلان رسمي فخم\n' +
-                     '🔹 `/avatar` - جلب صورة البروفايل\n🔹 `/clear` - مسح الرسائل\n' +
-                     '🔹 `/ban` / `/unban` - حظر ورفع الحظر\n🔹 `/kick` - طرد عضو\n' +
-                     '🔹 `/mute` / `/unmute` - إسكات ورفع الإسكات\n✨ بالإضافة إلى **ميزة الترحيب التلقائي** بالأعضاء الجدد!',
-            ephemeral: true 
-        });
+        await interaction.reply({ content: '🛠️ جميع الأوامر تعمل بنجاح!', ephemeral: true });
     }
 });
 
