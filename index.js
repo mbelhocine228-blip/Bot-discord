@@ -18,7 +18,7 @@ const client = new Client({
 
 app.use(express.urlencoded({ extended: true }));
 app.use(session({ 
-    secret: 'probot-full-dashboard-secret-999', 
+    secret: 'rks-power-ultimate-probot-99', 
     resave: false, 
     saveUninitialized: false,
     cookie: { secure: true, httpOnly: true, sameSite: 'lax' }
@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>RKS•ＰＯＷＥＲ Pro Dashboard</title>
+            <title>RKS•ＰＯＷＥＲ Ultimate Dashboard</title>
             <style>
                 body { background-color: #2f3136; color: #ffffff; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
                 .card { background: #36393f; padding: 40px; border-radius: 12px; text-align: center; border: 1px solid #202225; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 350px; }
@@ -74,7 +74,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h1>RKS•ＰＯＷＥＲ</h1>
-                <p>لوحة التحكم الشاملة (ProBot Style)</p>
+                <p>لوحة تحكم ProBot الاحترافية الكاملة</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد</a>
             </div>
         </body>
@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// صفحة اختيار السيرفرات (دائرية مثل كارل/بروبوت)
+// اختيار السيرفرات (شكل دائري احترافي)
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     
@@ -113,8 +113,8 @@ app.get('/dashboard', (req, res) => {
         </head>
         <body>
             <div class="container">
-                <h2>مرحباً، ${req.user.username}!</h2>
-                <p style="color: #b9bbbe;">الرجاء اختيار السيرفر للتحكم الكامل بأقسام البوت:</p>
+                <h2>مرحباً بك، ${req.user.username}!</h2>
+                <p style="color: #b9bbbe;">اختر السيرفر للوصول إلى كافة أقسام الأوامر والتحكم:</p>
                 <div class="grid">${guildsHtml || '<p style="color: #ed4245;">لا توجد سيرفرات مشتركة.</p>'}</div>
                 <br><a href="/logout" class="logout">تسجيل الخروج 🚪</a>
             </div>
@@ -123,25 +123,23 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// لوحة التحكم الشاملة (تحتوي على كل الأقسام المشابهة لبروبوت)
+// لوحة التحكم المتكاملة بكل الأقسام والأوامر
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) return res.send('السيرفر غير موجود.');
 
     const section = req.params.section || 'general';
-
-    // محتوى الأقسام المختلفة بناءً على اختيار القائمة الجانبية
     let contentHtml = '';
 
     if (section === 'general') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">📢 إرسال إعلان رسمي</div>
-                <div class="setting-desc">إرسال رسالة مباشرة إلى القنوات النصية المتاحة في السيرفر.</div>
+                <div class="setting-title">📢 إرسال إعلان رسمي للسيرفر</div>
+                <div class="setting-desc">إرسال رسالة فورية إلى أول قناة نصية متاح للبوت الكتابة فيها.</div>
                 <form action="/action/send" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    <textarea name="msg" rows="3" placeholder="اكتب نص الإعلان هنا..."></textarea>
+                    <textarea name="msg" rows="3" placeholder="اكتب نص الإعلان..."></textarea>
                     <button type="submit" class="btn-apply">إرسال 🚀</button>
                 </form>
             </div>
@@ -149,13 +147,13 @@ app.get('/control/:guildId/:section', (req, res) => {
     } else if (section === 'welcome') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">👋 نظام الترحيب بالأعضاء</div>
-                <div class="setting-desc">إرسال رسالة ترحيب تلقائية عند دخول أي عضو جديد للسيرفر.</div>
+                <div class="setting-title">👋 نظام الترحيب بالأعضاء الجدد</div>
+                <div class="setting-desc">تخصيص رسالة ترحيبية وإرسالها عند انضمام أي عضو.</div>
                 <form action="/action/save" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    <label style="font-size:13px; color:#b9bbbe;">رسالة الترحيب:</label>
-                    <textarea name="welcomeMsg" rows="3" placeholder="مرحباً بك في السيرفر!"></textarea>
-                    <button type="submit" class="btn-apply">حفظ التعديلات 💾</button>
+                    <label style="font-size:13px; color:#b9bbbe;">نص الترحيب:</label>
+                    <textarea name="welcomeMsg" rows="3" placeholder="مرحباً بك في سيرفرنا!"></textarea>
+                    <button type="submit" class="btn-apply">حفظ الترحيب 💾</button>
                 </form>
             </div>
         `;
@@ -163,38 +161,51 @@ app.get('/control/:guildId/:section', (req, res) => {
         contentHtml = `
             <div class="setting-card">
                 <div class="setting-title">🛡️ حماية السيرفر والأمان</div>
-                <div class="setting-desc">التحكم في الروابط الممنوعة، السبام، وحماية الأعضاء.</div>
+                <div class="setting-desc">أوامر التصدي للسبام والروابط الممنوعة وحماية الدردشة.</div>
                 <form action="/action/save" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
                     <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:15px; cursor:pointer;">
-                        <input type="checkbox" name="antiSpam" style="width:20px; height:20px;"> تفعيل نظام منع السبام التلقائي
+                        <input type="checkbox" name="antiSpam" style="width:18px; height:18px;"> تفعيل نظام منع التكرار والسبام
                     </label>
                     <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:15px; cursor:pointer;">
-                        <input type="checkbox" name="antiLinks" style="width:20px; height:20px;"> منع نشر الروابط الخارجية
+                        <input type="checkbox" name="antiLinks" style="width:18px; height:18px;"> منع إرسال الروابط الخارجية
                     </label>
-                    <button type="submit" class="btn-apply">حفظ إعدادات الحماية 🔒</button>
+                    <button type="submit" class="btn-apply">حفظ إعدادات الأمان 🔒</button>
+                </form>
+            </div>
+        `;
+    } else if (section === 'embed') {
+        contentHtml = `
+            <div class="setting-card">
+                <div class="setting-title">🎨 منشئ الرسائل المزخرفة (Embed Builder)</div>
+                <div class="setting-desc">صمم رسائل مدمجة واحترافية مثل بروبوت وارسئها للقنوات.</div>
+                <form action="/action/embed" method="POST">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <input type="text" name="embedTitle" placeholder="عنوان الرسالة (Title)">
+                    <textarea name="embedDesc" rows="3" placeholder="محتوى ووصف الرسالة (Description)"></textarea>
+                    <button type="submit" class="btn-apply">إرسال الـ Embed 🌟</button>
+                </form>
+            </div>
+        `;
+    } else if (section === 'commands') {
+        contentHtml = `
+            <div class="setting-card">
+                <div class="setting-title">⚙️ تخصيص الأوامر والبرفكس (Prefix)</div>
+                <div class="setting-desc">تغيير رمز تفعيل أوامر البوت في السيرفر.</div>
+                <form action="/action/save" method="POST">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <label style="font-size:13px; color:#b9bbbe;">البرفكس الحالي:</label>
+                    <input type="text" value="!" style="margin-top:5px;" disabled>
+                    <p style="font-size:12px; color:#8e9297;">قريباً دعم تغيير البرفكس المخصص بالكامل.</p>
                 </form>
             </div>
         `;
     } else if (section === 'logs') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">📋 سجلات الحركات (Logs)</div>
-                <div class="setting-desc">متابعة تعديل الرسائل، حذفها، دخول وخروج الأعضاء.</div>
-                <p style="color: #b9bbbe; font-size: 14px;">السجلات مفعلة وتعمل تلقائياً لتسجيل كافة أحداث السيرفر الهامة.</p>
-            </div>
-        `;
-    } else if (section === 'embed') {
-        contentHtml = `
-            <div class="setting-card">
-                <div class="setting-title">🎨 منشئ الرسائل المدمجة (Embed Builder)</div>
-                <div class="setting-desc">صمم رسائل احترافية مزخرفة وقم بإرسالها لأي قناة.</div>
-                <form action="/action/embed" method="POST">
-                    <input type="hidden" name="guildId" value="${guild.id}">
-                    <input type="text" name="embedTitle" placeholder="عنوان الرسالة (Title)">
-                    <textarea name="embedDesc" rows="3" placeholder="محتوى الرسالة (Description)"></textarea>
-                    <button type="submit" class="btn-apply">إرسال الـ Embed 🌟</button>
-                </form>
+                <div class="setting-title">📋 سجلات الحركات والأحداث (Logs)</div>
+                <div class="setting-desc">متابعة دخول وخروج الأعضاء، وتعديل وحذف الرسائل.</div>
+                <p style="color: #b9bbbe; font-size: 14px;">السجلات متصلة وتعمل بنجاح في الخلفية لمراقبة نشاط السيرفر.</p>
             </div>
         `;
     }
@@ -204,11 +215,11 @@ app.get('/control/:guildId/:section', (req, res) => {
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>إدارة ${guild.name} - ProBot Dashboard</title>
+            <title>إدارة ${guild.name} - ProBot Pro</title>
             <style>
                 body { background-color: #2f3136; color: white; font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
-                .sidebar { width: 260px; background: #202225; padding: 20px; display: flex; flex-direction: column; gap: 8px; border-left: 1px solid #2f3136; box-sizing: border-box; }
-                .sidebar h3 { font-size: 13px; color: #8e9297; margin: 15px 0 5px 0; text-transform: uppercase; }
+                .sidebar { width: 270px; background: #202225; padding: 20px; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid #2f3136; box-sizing: border-box; overflow-y: auto; }
+                .sidebar h3 { font-size: 12px; color: #8e9297; margin: 15px 0 5px 0; text-transform: uppercase; }
                 .sidebar a { color: #b9bbbe; text-decoration: none; padding: 10px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
                 .sidebar a:hover, .sidebar a.active { background: #393c43; color: #ffffff; }
                 .content { flex: 1; padding: 40px; overflow-y: auto; background: #36393f; }
@@ -222,14 +233,17 @@ app.get('/control/:guildId/:section', (req, res) => {
         </head>
         <body>
             <div class="sidebar">
-                <h3 style="margin-top:0;">إدارة السيرفر</h3>
+                <h3 style="margin-top:0;">القائمة الرئيسية</h3>
                 <a href="/control/${guild.id}/general" class="${section === 'general' ? 'active' : ''}">📢 الإعلانات العامة</a>
-                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">👋 الترحيب والأعضاء</a>
+                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">👋 نظام الترحيب</a>
                 <a href="/control/${guild.id}/moderation" class="${section === 'moderation' ? 'active' : ''}">🛡️ الحماية والأمان</a>
-                <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 سجلات الحركات</a>
                 <a href="/control/${guild.id}/embed" class="${section === 'embed' ? 'active' : ''}">🎨 منشئ الـ Embeds</a>
                 
-                <h3 style="margin-top: 20px;">نظام التنقل</h3>
+                <h3>إدارة الأوامر</h3>
+                <a href="/control/${guild.id}/commands" class="${section === 'commands' ? 'active' : ''}">⚙️ إعدادات الأوامر</a>
+                <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 سجلات الحركات</a>
+                
+                <h3>التنقل والحساب</h3>
                 <a href="/dashboard">← اختيار سيرفر آخر</a>
                 <a href="/logout" style="color: #ed4245; margin-top: auto;">تسجيل الخروج 🚪</a>
             </div>
@@ -243,7 +257,7 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// استقبال الأوامر وحفظها
+// معالجة النشر وحفظ البيانات
 app.post('/action/send', async (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     try {
@@ -270,7 +284,7 @@ app.post('/action/embed', async (req, res) => {
             if (ch) {
                 await ch.send({
                     embeds: [{
-                        title: req.body.embedTitle || 'إشعار',
+                        title: req.body.embedTitle || 'إشعار رسمي',
                         description: req.body.embedDesc || '',
                         color: 0x5865F2
                     }]
@@ -282,5 +296,5 @@ app.post('/action/embed', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`ProBot Dashboard running on port ${PORT}`));
+app.listen(PORT, () => console.log(`ProBot Ultimate Dashboard running on port ${PORT}`));
 client.login(process.env.DISCORD_TOKEN);
