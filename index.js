@@ -46,10 +46,7 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// --- تخزين رومات الأخبار الخاصة بكل سيرفر ---
 const newsChannels = new Map();
-
-// --- أخبار Racing Master الدورية للتناوب ---
 const racingMasterNewsList = [
   "🏎️ **تحديث الحلبات الجديد:** تمت إضافة مسارات جديدة كلياً في حلبات طوكيو مع تحسينات جبارة على فيزيائية الانجراف (Drift).",
   "🚗 **أسطول السيارات الخارقة:** وصول سيارات جديدة فئة S في التحديث القادم، استعد لتطوير كراج كلان RKS•ＰＯＷＥＲ!",
@@ -57,7 +54,6 @@ const racingMasterNewsList = [
   "🛠️ **صيانة وتحسينات الجرافيك:** قامت الشركة المطورة بتحسين جودة الإضاءة والانعكاسات على الهياكل لتقارب الواقع بنسبة كبيرة."
 ];
 
-// --- تسجيل جميع الأوامر الكاملة ---
 const commands = [
     new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
@@ -92,7 +88,6 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
     } catch (error) { console.error(error); }
 
-    // --- نظام النشر التلقائي كل 30 دقيقة (1800000 مللي ثانية) ---
     setInterval(() => {
         newsChannels.forEach(async (channelId, guildId) => {
             try {
@@ -100,27 +95,21 @@ client.once('ready', async () => {
                 if (!guild) return;
                 const channel = guild.channels.cache.get(channelId);
                 if (!channel) return;
-
-                // اختيار خبر عشوائي أو بالترتيب
                 const randomNews = racingMasterNewsList[Math.floor(Math.random() * racingMasterNewsList.length)];
-                
                 const embed = new EmbedBuilder()
                     .setTitle('🏎️ تحديث أخبار Racing Master التلقائي')
                     .setDescription(randomNews)
                     .setColor('#FF4500')
                     .setFooter({ text: 'RKS•ＰＯＷＥＲ Auto News System' })
                     .setTimestamp();
-
                 await channel.send({ embeds: [embed] });
-            } catch (err) {
-                console.error('خطأ في النشر التلقائي:', err);
-            }
+            } catch (err) { console.error(err); }
         });
-    }, 30 * 60 * 1000); 
+    }, 30 * 60 * 1000);
 });
 
-// --- تصميم لوحة التحكم الاحترافية (القائمة الجانبية + اللوحة الزجاجية) ---
-const commonStyle = `
+// --- تصميم لوحة تحكم ممتلئة وغنية بالتفاصيل والأوامر ---
+const richStyle = `
     body {
         background: linear-gradient(135deg, #0a0b10 0%, #151828 50%, #221535 100%);
         color: #ffffff;
@@ -128,93 +117,99 @@ const commonStyle = `
         margin: 0;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         display: flex;
-    }
-    .sidebar {
-        width: 260px;
-        background: rgba(18, 20, 28, 0.95);
-        backdrop-filter: blur(15px);
-        border-left: 1px solid rgba(255, 255, 255, 0.08);
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        box-shadow: 5px 0 25px rgba(0,0,0,0.5);
-    }
-    .sidebar h3 {
-        color: #FFD700;
-        font-size: 18px;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-    .sidebar a {
-        color: #b9bbbe;
-        text-decoration: none;
-        padding: 12px 15px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        font-size: 14px;
-        transition: 0.3s;
-        display: block;
-    }
-    .sidebar a:hover, .sidebar a.active {
-        background: rgba(88, 101, 242, 0.2);
-        color: #ffffff;
-        border-right: 4px solid #5865F2;
-    }
-    .main-content {
-        flex: 1;
-        padding: 40px;
-        display: flex;
         justify-content: center;
-        align-items: center;
-        overflow-y: auto;
+        align-items: flex-start;
+        padding: 30px 15px;
     }
-    .glass-card {
-        background: rgba(25, 27, 38, 0.85);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
-        border-radius: 20px;
-        padding: 40px;
-        text-align: center;
-        max-width: 600px;
+    .container {
         width: 100%;
+        max-width: 850px;
+        background: rgba(20, 22, 32, 0.9);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
+        border-radius: 20px;
+        padding: 35px;
     }
-    .btn-discord {
+    .header-box {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 25px;
+        margin-bottom: 25px;
+    }
+    .guild-img {
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #FFD700;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+    }
+    .section-title {
+        color: #FFD700;
+        font-size: 22px;
+        font-weight: bold;
+        margin-bottom: 8px;
+    }
+    .section-box {
+        background: rgba(30, 33, 48, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .section-box h3 {
+        color: #5865F2;
+        margin-top: 0;
+        font-size: 17px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .command-list {
+        background: rgba(15, 17, 25, 0.8);
+        padding: 15px;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 13px;
+        color: #dcdcdc;
+        line-height: 1.8;
+        max-height: 220px;
+        overflow-y: auto;
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .btn-action {
         background: #5865F2;
         color: white;
-        padding: 14px 28px;
+        padding: 10px 20px;
         text-decoration: none;
-        border-radius: 10px;
-        display: inline-block;
+        border-radius: 8px;
         font-weight: bold;
-        font-size: 15px;
+        font-size: 13px;
+        display: inline-block;
         transition: 0.3s;
-        box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
     }
-    .btn-discord:hover {
+    .btn-action:hover {
         background: #4752C4;
-        transform: translateY(-2px);
     }
-    .btn-add {
-        background: #23a55a;
-        color: white;
-        padding: 12px 24px;
+    .btn-back {
+        background: rgba(237, 66, 69, 0.2);
+        color: #ed4245;
+        border: 1px solid rgba(237, 66, 69, 0.4);
+        padding: 10px 20px;
         text-decoration: none;
-        border-radius: 10px;
-        display: inline-block;
+        border-radius: 8px;
         font-weight: bold;
-        font-size: 14px;
-        transition: 0.3s;
-    }
-    .btn-add:hover {
-        background: #1f8b4c;
+        font-size: 13px;
+        display: inline-block;
     }
 `;
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>RKS Dashboard</title><style>body { justify-content: center; align-items: center; } ${commonStyle}</style></head><body><div class="glass-card"><h2 style="color: #FFD700; margin-bottom: 12px; font-size: 30px;">RKS•ＰＯＷＥＲ</h2><p style="color: #b9bbbe; margin-bottom: 30px; font-size: 15px;">لوحة التحكم الشاملة لإدارة السيرفرات والألعاب</p><a href="/login" class="btn-discord">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 22px;"><a href="${INVITE_URL}" target="_blank" class="btn-add">+ إضافة البوت لسيرفرك</a></div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>RKS Dashboard</title><style>${richStyle}</style></head><body><div class="container" style="text-align: center;"><h1 style="color: #FFD700; font-size: 32px;">⚡ RKS•ＰＯＷＥＲ Dashboard</h1><p style="color: #b9bbbe; margin-bottom: 25px;">لوحة التحكم الشاملة لإدارة سيرفرات ديسكورد وكلانات الألعاب</p><a href="/login" class="btn-action" style="padding: 14px 30px; font-size: 16px;">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 20px;"><a href="${INVITE_URL}" target="_blank" style="color: #23a55a; font-weight: bold; text-decoration: none;">+ إضافة البوت لسيرفرك</a></div></div></body></html>`);
 });
 
 app.get('/dashboard', (req, res) => {
@@ -222,45 +217,73 @@ app.get('/dashboard', (req, res) => {
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
         let iconUrl = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
-        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(45,48,64,0.7);padding:20px;border-radius:16px;width:150px;border:1px solid rgba(255,255,255,0.08);transition:0.3s;"><img src="${iconUrl}" style="width:85px;height:85px;border-radius:50%;object-fit:cover;margin-bottom:12px;box-shadow: 0 4px 12px rgba(0,0,0,0.4);"><span style="font-size:14px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
+        guildsHtml += `<a href="/control/${guild.id}" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(30,33,48,0.8);padding:20px;border-radius:14px;width:150px;border:1px solid rgba(255,255,255,0.08);transition:0.3s;"><img src="${iconUrl}" style="width:75px;height:75px;border-radius:50%;object-fit:cover;margin-bottom:12px;"><span style="font-size:14px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
     });
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>اختر السيرفر</title><style>body { justify-content: center; align-items: center; } ${commonStyle} .dashboard-card { background: rgba(25, 27, 38, 0.9); max-width: 750px; width: 95%; padding: 35px; border-radius: 20px; }</style></head><body><div class="dashboard-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;"><h3 style="margin:0; color:#FFD700; font-size: 20px;">👋 مرحباً بك، ${req.user.username}</h3><div><a href="${INVITE_URL}" target="_blank" class="btn-add" style="margin-left: 10px; padding: 10px 18px; font-size:13px;">+ إضافة بوت جديد</a><a href="/logout" style="background:#ed4245; color:white; padding:10px 18px; text-decoration:none; border-radius:8px; font-size:13px; font-weight:bold;">خروج</a></div></div><p style="color:#b9bbbe; font-size:15px; margin-bottom:25px;">اختر السيرفر أدناه للتحكم بإعداداته وأقسامه:</p><div style="display:flex; gap:20px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>اختر السيرفر</title><style>${richStyle}</style></head><body><div class="container"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><h2 style="color:#FFD700; margin:0;">👋 أهلاً بك، ${req.user.username}</h2><a href="/logout" style="background:#ed4245; color:white; padding:8px 15px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:bold;">خروج</a></div><p style="color:#b9bbbe; margin-bottom:20px;">اختر السيرفر أدناه لفتح لوحة التحكم الكاملة والممتلئة بالأوامر:</p><div style="display:flex; gap:15px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
 });
 
-app.get('/control/:guildId/:section', (req, res) => {
+app.get('/control/:guildId', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) return res.send('السيرفر غير موجود.');
     
     let guildIcon = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
-    const section = req.params.section;
 
     res.send(`
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>إدارة ${guild.name}</title>
-            <style>${commonStyle}</style>
+            <title>إدارة ${guild.name} - ROCKS</title>
+            <style>${richStyle}</style>
         </head>
         <body>
-            <div class="sidebar">
-                <h3>RKS Dashboard</h3>
-                <a href="/control/${guild.id}/commands" class="${section === 'commands' ? 'active' : ''}">⚡ أوامر البوت</a>
-                <a href="/control/${guild.id}/racing" class="${section === 'racing' ? 'active' : ''}">🏎️ Racing Master</a>
-                <a href="/control/${guild.id}/stats" class="${section === 'stats' ? 'active' : ''}">📊 الإحصائيات</a>
-                <a href="/control/${guild.id}/roles" class="${section === 'roles' ? 'active' : ''}">🛡️ الرتب والصلاحيات</a>
-                <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 السجلات والحماية</a>
-                <div style="margin-top: auto;">
-                    <a href="/dashboard" style="background: rgba(237, 66, 69, 0.2); color: #ed4245; text-align: center; border: 1px solid rgba(237,66,69,0.3);">← العودة للسيرفرات</a>
+            <div class="container">
+                <div class="header-box">
+                    <img src="${guildIcon}" class="guild-img">
+                    <div>
+                        <div class="section-title">ROCKS / روكس (${guild.name})</div>
+                        <p style="color: #b9bbbe; margin: 0; font-size: 14px;">لوحة التحكم الكاملة لإدارة الصلاحيات والأقسام داخل السيرفر بكل سهولة.</p>
+                    </div>
                 </div>
-            </div>
-            <div class="main-content">
-                <div class="glass-card">
-                    <img src="${guildIcon}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;margin-bottom:18px;border:3px solid #FFD700;box-shadow: 0 8px 25px rgba(0,0,0,0.6);">
-                    <h2 style="color:#FFD700; margin-bottom:12px; font-size:26px;">${guild.name}</h2>
-                    <p style="color:#b9bbbe; font-size:15px; margin-bottom:25px;">أنت الآن تتصفح قسم <strong>${section}</strong> المخصص لإدارة السيرفر وكلان RKS•ＰＯＷＥＲ بكل احترافية.</p>
-                    <a href="/dashboard" class="btn-discord" style="font-size:14px; padding:12px 24px;">لوحة التحكم الرئيسية</a>
+
+                <div class="section-box">
+                    <h3>⚡ إجبار بادئة الأوامر (Prefix) الخاصة بالبوت</h3>
+                    <p style="color: #b9bbbe; font-size: 13px; margin-bottom: 12px;">البوت يعمل بنظام الأوامر السريعة (Slash Commands) مع دعم بادئة النظام المخصصة:</p>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" value="/" readonly style="background: rgba(15,17,25,0.9); border: 1px solid rgba(255,255,255,0.15); color: #FFD700; padding: 10px; border-radius: 8px; width: 80px; text-align: center; font-weight: bold;">
+                        <span style="background: #23a55a; color: white; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 13px; display: inline-flex; align-items: center;">البادئة مفعلة ومحفوظة ✅</span>
+                    </div>
+                </div>
+
+                <div class="section-box">
+                    <h3>📋 قائمة الأوامر الكاملة المتاحة في البوت وشرحها (30 أمراً متكاملاً):</h3>
+                    <div class="command-list">
+                        • /ban [[@العضو]] [السبب] - لفك الحظر عن العضو أو حظره.<br>
+                        • /kick [[@العضو]] [السبب] - لطرد العضو المشاغب.<br>
+                        • /mute [[@العضو]] - لكتم العضو مؤقتاً 10 دقائق.<br>
+                        • /unmute [[@العضو]] - لرفع الكتم عن العضو.<br>
+                        • /clear [العدد] - لمسح الرسائل بسرعة.<br>
+                        • /lock & /unlock - لقفل وفتح الرومات الحالية.<br>
+                        • /say [النص] - لجعل البوت يكرر كلامك.<br>
+                        • /ann [النص] - لإرسال إعلان رسمي مع منشن عام (@everyone).<br>
+                        • /embed [العنوان] [المحتوى] - لإنشاء رسالة مزخرفة مخصصة.<br>
+                        • /avatar [العضو] - لعرض صورة بروفايلك أو عضو آخر بحجم كبير.<br>
+                        • /serverinfo - عرض معلومات السيرفر الكاملة.<br>
+                        • /google [البحث] - للبحث في جوجل مباشرة من السيرفر.<br>
+                        • /setnews [#الروم] - لتفعيل النشر التلقائي لأخبار Racing Master كل 30 دقيقة.<br>
+                        • /racingnews - آخر أخبار لعبة Racing Master الرسمية.<br>
+                        • /rockstats - عرض إحصائيات كلان RKS•ＰＯＷＥＲ.<br>
+                        • /roll & /coinflip - ألعاب الحظ والزهر وطرة أو كتابة.<br>
+                        • /ascii [النص] - تحويل النص إلى حروف بارزة وزخرفية.<br>
+                        • /uptime - معرفة مدة تشغيل البوت المستمرة.<br>
+                        • /botinfo - معلومات تقنية عن البوت وحالة الاتصال.
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 25px;">
+                    <a href="/dashboard" class="btn-back">← العودة للسيرفرات</a>
+                    <a href="${INVITE_URL}" target="_blank" class="btn-action">+ إضافة البوت لسيرفر آخر</a>
                 </div>
             </div>
         </body>
@@ -268,7 +291,6 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// --- تنفيذ الأوامر داخل ديسكورد ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
@@ -418,4 +440,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم مع نظام النشر التلقائي لأخبار Racing Master تعمل بنجاح!'));
+app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم الشاملة والممتلئة تعمل الآن بنجاح تام!'));
