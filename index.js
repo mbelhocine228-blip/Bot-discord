@@ -29,13 +29,19 @@ passport.use(new DiscordStrategy({
     clientSecret: 'I1JZsvXEZ_L4iQjAlIMurRy-c_ikOecN', 
     callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
     scope: ['identify', 'guilds']
-}, (accessToken, refreshToken, profile, done) => done(null, profile)));
+}, (accessToken, refreshToken, profile, done) => {
+    process.nextTick(() => {
+        return done(null, profile);
+    });
+}));
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(obj, done));
 
 app.get('/login', passport.authenticate('discord'));
-app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/servers'));
+app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => {
+    res.redirect('/servers');
+});
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 // --- واجهة الموقع الرئيسية الكبيرة والفخمة ---
