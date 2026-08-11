@@ -40,7 +40,7 @@ passport.deserializeUser((obj, done) => done(obj, done));
 
 app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => {
-    res.redirect('/servers');
+    res.redirect('/dashboard');
 });
 app.get('/logout', (req, res) => { 
     req.logout(() => res.redirect('/')); 
@@ -64,7 +64,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h1>RKS•ＰＯＷＥＲ</h1>
-                <p>لوحة التحكم الاحترافية لإدارة سيرفرات ديسكورد</p>
+                <p>لوحة التحكم الاحترافية لإدارة البوت وسيرفرات ديسكورد</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد 🚀</a>
             </div>
         </body>
@@ -72,53 +72,60 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- صفحة اختيار السيرفرات ---
-app.get('/servers', (req, res) => {
+// --- لوحة التحكم المباشرة والآمنة ---
+app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated() || !req.user) return res.redirect('/login');
     
-    const guilds = req.user.guilds || [];
+    // جلب السيرفرات المشتركة التي يديرها البوت والمستخدم مباشرة من الكاش لتجنب أي خطأ
+    const mutualGuilds = client.guilds.cache.filter(g => g.members.cache.has(req.user.id));
     
-    let html = `
-        <div style="font-family: Arial; padding: 30px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
-            <h2>مرحباً، ${req.user.username}! اختر سيرفر للبدء في إدارته:</h2>
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px;">
-    `;
-    
-    if (guilds.length === 0) {
-        html += `<p style="color: #f04747;">لم يتم العثور على سيرفرات متاحة.</p>`;
-    }
-
-    guilds.forEach(s => {
-        const iconUrl = s.icon ? `https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
-        html += `
-            <a href="/dashboard/${s.id}" style="background: #2f3136; padding: 15px; border-radius: 8px; text-decoration: none; color: white; width: 200px; text-align: center; display: inline-block;">
-                <img src="${iconUrl}" width="60" height="60" style="border-radius: 50%;"><br>
-                <h4 style="margin: 10px 0 0 0;">${s.name}</h4>
-            </a>
+    let guildsHtml = '';
+    mutualGuilds.forEach(guild => {
+        guildsHtml += `
+            <div style="background: #2f3136; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 18px; font-weight: bold;">🛡️ ${guild.name}</span>
+                <a href="/control/${guild.id}" style="background: #5865F2; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none;">إدارة السيرفر</a>
+            </div>
         `;
     });
-    
-    html += `</div></div>`;
-    res.send(html);
+
+    if (mutualGuilds.size === 0) {
+        guildsHtml = `<p style="color: #f04747;">لا توجد سيرفرات مشتركة يظهر فيها البوت معك حالياً. تأكد من إضافة البوت لسيرفرك!</p>`;
+    }
+
+    res.send(`
+        <div style="font-family: Arial; padding: 40px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
+            <h2>مرحباً بك، ${req.user.username} 👋</h2>
+            <p style="color: #b9bbbe;">اختر السيرفر الذي تريد التحكم به:</p>
+            <div style="max-width: 600px; margin-top: 20px;">
+                ${guildsHtml}
+            </div>
+            <br>
+            <a href="/logout" style="color: #f04747; text-decoration: none;">تسجيل الخروج 🚪</a>
+        </div>
+    `);
 });
 
-// --- لوحة تحكم السيرفر المحدد ---
-app.get('/dashboard/:guildId', (req, res) => {
+// --- صفحة إعدادات وأوامر السيرفر المحدد ---
+app.get('/control/:guildId', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
+    const guild = client.guilds.cache.get(guildId);
     
+    if (!guild) return res.send('السيرفر غير موجود أو البوت ليس داخله.');
+
     res.send(`
-        <div style="font-family: Arial; padding: 30px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
-            <h2>لوحة تحكم السيرفر ⚙️</h2>
+        <div style="font-family: Arial; padding: 40px; background: #1a1a1a; color: white; min-height: 100vh;" dir="rtl">
+            <h2>لوحة تحكم السيرفر: ${guild.name} ⚙️</h2>
             <hr style="border-color: #444;">
-            <h3>إرسال إعلان عبر البوت:</h3>
-            <form action="/send-announcement" method="POST" style="background: #2f3136; padding: 20px; border-radius: 8px; width: 400px;">
+            <h3>إرسال إعلان رسمي عبر البوت:</h3>
+            <form action="/send-announcement" method="POST" style="background: #2f3136; padding: 20px; border-radius: 8px; max-width: 500px;">
                 <input type="hidden" name="guildId" value="${guildId}">
-                <textarea name="message" rows="4" style="width: 100%; padding: 8px; border-radius: 4px; background: #202225; color: white;" placeholder="اكتب نص الإعلان..."></textarea><br><br>
-                <button type="submit" style="background: #3ba55d; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">إرسال</button>
+                <textarea name="message" rows="4" style="width: 100%; padding: 10px; border-radius: 6px; background: #202225; color: white; border: 1px solid #444;" placeholder="اكتب نص الإعلان هنا..."></textarea><br><br>
+                <button type="submit" style="background: #3ba55d; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">إرسال الإعلان 📢</button>
             </form>
             <br>
-            <a href="/servers" style="color: #00aff4; text-decoration: none;">← العودة لقائمة السيرفرات</a>
+            <a href="/dashboard" style="color: #00aff4; text-decoration: none;">← العودة لقائمة السيرفرات</a>
         </div>
     `);
 });
@@ -133,7 +140,7 @@ app.post('/send-announcement', async (req, res) => {
             if (channel) await channel.send(message);
         }
     } catch (e) { console.log(e); }
-    res.send(`<script>alert('تم إرسال الإعلان بنجاح!'); window.location.href='/dashboard/${guildId}';</script>`);
+    res.send(`<script>alert('تم إرسال الإعلان بنجاح!'); window.location.href='/control/${guildId}';</script>`);
 });
 
 const commands = [
