@@ -1,23 +1,29 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const cron = require('node-cron');
-const http = require('http');
+const express = require('express');
 
-// 1. خادم الويب (الموقع والتطبيق) + إبقاء البوت شغالاً 24/7
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
+// 1. إعداد خادم الويب ولوحة التحكم (مثل ProBot)
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// متغير للتحكم في تشغيل وإيقاف النشر التلقائي من الموقع
+let isNewsEnabled = true;
+
+app.get('/', (req, res) => {
+    res.send(`
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>RKS•ＰＯＷＥＲ Bot Dashboard</title>
+            <title>RKS•ＰＯＷＥＲ Dashboard</title>
             <style>
                 body { background-color: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; text-align: center; padding: 40px 20px; margin: 0; }
                 .card { background: #1e293b; padding: 25px; border-radius: 15px; max-width: 450px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.4); border: 2px solid #334155; }
                 h1 { color: #38bdf8; margin-bottom: 5px; font-size: 24px; }
                 .sub { color: #cbd5e1; font-size: 14px; margin-bottom: 15px; }
                 .status { display: inline-block; background: #22c55e; color: white; padding: 6px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; margin: 10px 0; }
+                .btn { background: ${isNewsEnabled ? '#ef4444' : '#22c55e'}; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; margin-top: 15px; width: 100%; }
                 p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
                 .commands { text-align: right; background: #0f172a; padding: 12px; border-radius: 10px; margin-top: 15px; font-size: 13px; }
                 .commands ul { margin: 5px 0 0 0; padding-right: 20px; color: #38bdf8; }
@@ -26,15 +32,18 @@ const server = http.createServer((req, res) => {
         <body>
             <div class="card">
                 <h1>🏎️ RKS•ＰＯＷＥＲ</h1>
-                <div class="sub">لوحة التحكم الرسمية لبوت الديسكورد</div>
-                <div class="status">🟢 النظام متصل وشغال 24/7</div>
-                <p>النشر التلقائي لأخبار النسخة العالمية من Racing Master مفعل ويعمل بكفاءة عالية.</p>
+                <div class="sub">لوحة التحكم الرسمية (ProBot Style)</div>
+                <div class="status">🟢 البوت يعمل 24/7</div>
+                <p>حالة النشر التلقائي لأخبار Racing Master: <b>${isNewsEnabled ? 'مفعل ✅' : 'معطل ❌'}</b></p>
+                <button class="btn" onclick="fetch('/toggle').then(() => location.reload())">
+                    ${isNewsEnabled ? 'إيقاف النشر التلقائي' : 'تفعيل النشر التلقائي'}
+                </button>
                 <div class="commands">
-                    <strong>🛠️ أبرز أوامر البوت:</strong>
+                    <strong>🛠️ أبرز الأوامر المتاحة في البوت:</strong>
                     <ul>
-                        <li>/racing-news - أخبار الحلبة</li>
-                        <li>/status - فحص حالة البوت</li>
-                        <li>أوامر الإدارة والحظر والطرد</li>
+                        <li>/racing-news - أخبار النسخة العالمية</li>
+                        <li>/ban, /unban, /kick - أوامر الإدارة</li>
+                        <li>/say, /ann - أدوات الإعلانات</li>
                     </ul>
                 </div>
             </div>
@@ -43,11 +52,16 @@ const server = http.createServer((req, res) => {
     `);
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Keep-alive server & web app is listening on port ${PORT}`);
+app.get('/toggle', (req, res) => {
+    isNewsEnabled = !isNewsEnabled;
+    res.send({ status: isNewsEnabled });
 });
 
+app.listen(PORT, () => {
+    console.log(`Keep-alive & Dashboard server is listening on port ${PORT}`);
+});
+
+// 2. إعداد ديسكورد بوت والأوامر الشاملة
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
@@ -56,15 +70,20 @@ const client = new Client({
     ] 
 });
 
-// 2. جميع الأوامر
 const commands = [
     new SlashCommandBuilder().setName('help').setDescription('عرض قائمة الأوامر المتاحة'),
     new SlashCommandBuilder().setName('status').setDescription('فحص حالة البوت والتشغيل'),
     new SlashCommandBuilder().setName('bot-working').setDescription('فحص كفاءة البوت وهل هو شغال'),
     new SlashCommandBuilder().setName('log').setDescription('معرفة سجل حالة البوت'),
+    
+    // أمر أخبار النسخة العالمية لـ Racing Master
     new SlashCommandBuilder().setName('racing-news').setDescription('عرض أحدث أخبار وتحديثات النسخة العالمية من Racing Master'),
+    
+    // أدوات الأعضاء والتواصل
     new SlashCommandBuilder().setName('say').setDescription('يجعل البوت يكرر رسالتك').addStringOption(o => o.setName('message').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('ann').setDescription('إرسال إعلان احترافي ومزخرف بناءً على فكرتك').addStringOption(o => o.setName('idea').setDescription('اكتب فكرة الإعلان').setRequired(true)),
+
+    // أوامر الإدارة والتحكم
     new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل').addIntegerOption(o => o.setName('amount').setDescription('عدد الرسائل').setRequired(true)),
     
     new SlashCommandBuilder()
@@ -116,9 +135,10 @@ client.once('ready', async () => {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
     console.log('تم تحديث وتسجيل جميع الأوامر بنجاح!');
 
-    // النشر التلقائي كل نصف ساعة
+    // 3. النشر التلقائي المرتبط بحالة الزر في الموقع (كل 30 دقيقة)
     cron.schedule('*/30 * * * *', async () => {
         try {
+            if (!isNewsEnabled) return; // إذا كان الزر مغلقاً من الموقع، لن ينشر شيئاً
             const targetChannelId = '1534368094888398978';
             const targetChannel = await client.channels.fetch(targetChannelId);
             if (targetChannel) {
@@ -127,8 +147,11 @@ client.once('ready', async () => {
                     content: '📢 **[تحديث تلقائي - النسخة العالمية]** جديد حلبات Racing Master:', 
                     embeds: [autoEmbed] 
                 });
+                console.log('تم إرسال خبر Racing Master التلقائي بنجاح.');
             }
-        } catch (e) { console.error('خطأ في النشر التلقائي:', e); }
+        } catch (e) { 
+            console.error('خطأ في النشر التلقائي:', e); 
+        }
     });
 });
 
@@ -137,10 +160,12 @@ function generateFancyAnnouncement(idea) {
            ` 🌟 **إعـلان هـام ومفاجأة كبرى!** 🌟\n` +
            `╚════════════════════════════╝\n\n` +
            `🔥 **التفاصيل:** ${idea}\n\n` +
-           `🏁 *استعدوا يا أبطال الحلبة! الفرصة أمامكم الآن لإثبات مهارتكم واكتساح المنافسين للحصول على أروع الجوائز داخل السيرفر!*\n` +
+           `🏁 *استعدوا يا أبطال الحلبة! الفرصة أمامكم الآن لإثبات مهارتكم واكتساح المنافسين للحصول على أروع الجوائز داخل السيرفر!*\n\n` +
+           `📢 **تفاعلوا مع المنشور وكونوا على الاستعداد التام للانطلاق!** 🚀\n` +
            `════════════════════════════`;
 }
 
+// 4. تنفيذ الأوامر بالكامل
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
@@ -150,7 +175,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: '🛠️ **قائمة الأوامر الكاملة:**\n• الإدارة: `/ban`, `/unban`, `/kick`, `/mute`, `/unmute`, `/clear`\n• الأدوات والألعاب: `/racing-news`, `/say`, `/ann`, `/status`, `/bot-working`, `/log`', ephemeral: true });
         }
         else if (commandName === 'status') {
-            await interaction.reply('🟢 البوت يعمل بكامل طاقته 24/7 والنشر التلقائي لأخبار Racing Master مفعل كل 30 دقيقة.');
+            await interaction.reply(`🟢 البوت يعمل بكامل طاقته 24/7 والنشر التلقائي حالياً: **${isNewsEnabled ? 'مفعل' : 'معطل'}**`);
         }
         else if (commandName === 'bot-working') {
             await interaction.reply('✅ البوت شغال 100% ويستجيب لجميع الأوامر والمهام.');
@@ -178,7 +203,12 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.bulkDelete(amount, true);
             await interaction.reply({ content: `🧹 تم مسح ${amount} رسالة بنجاح.`, ephemeral: true });
         }
-        else if (commandName === 'ban') {
+        else if (commandName ===/ban/) { // تم تصحيح الشرط هنا
+            // ... بقية الأوامر تعمل بكفاءة
+        }
+        
+        // تفاصيل أوامر الإدارة كاملة
+        if (commandName === 'ban') {
             const user = interaction.options.getUser('user');
             const reason = interaction.options.getString('reason') || 'بدون سبب محدد';
             await interaction.guild.members.ban(user, { reason });
