@@ -8,20 +8,25 @@ const app = express();
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers, 
+        GatewayIntentBits.GuildMembers, // ضروري جداً لميزة الترحيب
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent 
     ] 
 });
 
+// --- إعدادات الموقع والتحقق (Dashboard & Auth) ---
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ secret: 'rks-power-secret-key-99', resave: false, saveUninitialized: false }));
+app.use(session({ 
+    secret: 'rks-power-secret-key-99', 
+    resave: false, 
+    saveUninitialized: false 
+}));
 app.use(passport.initialize());
 app.use(passport.session());
 
 passport.use(new DiscordStrategy({
-    clientID: 'YOUR_CLIENT_ID',         
-    clientSecret: 'YOUR_CLIENT_SECRET', 
+    clientID: '1171579175635800175',         
+    clientSecret: 'I1JZsvXEZ_L4iQjAlIMurRy-c_ikOecN', 
     callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => done(null, profile)));
@@ -33,13 +38,72 @@ app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/servers'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
+// --- واجهة الموقع الرئيسية الكبيرة والفخمة ---
 app.get('/', (req, res) => {
     res.send(`
-        <div style="font-family: Arial; text-align: center; margin-top: 50px; background: #1a1a1a; color: white; padding: 40px; border-radius: 10px; width: 500px; margin-left: auto; margin-right: auto;">
-            <h1>RKS•ＰＯＷＥＲ Bot Dashboard</h1>
-            <p>لوحة التحكم الرسمية لإدارة سيرفرات ديسكورد</p>
-            <a href="/login" style="background: #5865F2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-top: 20px;">تسجيل الدخول عبر ديسكورد 🚀</a>
-        </div>
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>RKS•ＰＯＷＥＲ Dashboard</title>
+            <style>
+                body {
+                    background-color: #0f1015;
+                    color: #ffffff;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                }
+                .card {
+                    background: #1e1f26;
+                    padding: 50px 40px;
+                    border-radius: 20px;
+                    text-align: center;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                    max-width: 500px;
+                    width: 90%;
+                    border: 1px solid #2f3136;
+                }
+                h1 {
+                    font-size: 32px;
+                    margin-bottom: 15px;
+                    color: #5865F2;
+                }
+                p {
+                    font-size: 18px;
+                    color: #b9bbbe;
+                    margin-bottom: 35px;
+                }
+                .btn {
+                    background-color: #5865F2;
+                    color: white;
+                    padding: 16px 32px;
+                    font-size: 20px;
+                    font-weight: bold;
+                    text-decoration: none;
+                    border-radius: 12px;
+                    display: inline-block;
+                    transition: background 0.3s, transform 0.2s;
+                    box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+                }
+                .btn:hover {
+                    background-color: #4752c4;
+                    transform: scale(1.05);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>RKS•ＰＯＷＥＲ</h1>
+                <p>لوحة التحكم الاحترافية لإدارة سيرفرات ديسكورد بكل كفاءة وسرعة.</p>
+                <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد 🚀</a>
+            </div>
+        </body>
+        </html>
     `);
 });
 
@@ -103,6 +167,7 @@ app.post('/send-announcement', async (req, res) => {
     res.send(`<script>alert('تم إرسال الإعلان بنجاح!'); window.location.href='/dashboard/${guildId}';</script>`);
 });
 
+// --- تعريف أوامر البوت (Slash Commands) ---
 const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
     new SlashCommandBuilder().setName('say').setDescription('يجعل البوت يكرر رسالتك').addStringOption(opt => opt.setName('message').setDescription('الرسالة').setRequired(true)),
@@ -125,6 +190,7 @@ client.once('ready', async () => {
     } catch (e) { console.error(e); }
 });
 
+// --- ميزة الترحيب التلقائي بالأعضاء الجدد ---
 client.on('guildMemberAdd', async member => {
     const welcomeChannel = member.guild.channels.cache.find(c => c.name.includes('welcome') || c.name.includes('الترحيب')) || 
                            member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me).has('SendMessages'));
@@ -140,6 +206,7 @@ client.on('guildMemberAdd', async member => {
     await welcomeChannel.send({ embeds: [embed] });
 });
 
+// --- تنفيذ الأوامر داخل ديسكورد ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
@@ -206,7 +273,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `تم رفع الميوت 🔊` });
     }
     else if (commandName === 'help') {
-        await interaction.reply({ content: '🛠️ جميع الأوامر تعمل بنجاح!', ephemeral: true });
+        await interaction.reply({ content: '🛠️ جميع أوامر الإدارة والترحيب تعمل بنجاح!', ephemeral: true });
     }
 });
 
