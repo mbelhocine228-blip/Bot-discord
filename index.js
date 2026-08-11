@@ -104,7 +104,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// --- لوحة التحكم التفصيلية والكاملة (بكل الأقسام وقائمة الأوامر) ---
+// --- لوحة التحكم التفصيلية والكاملة ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -146,8 +146,8 @@ app.get('/control/:guildId/:section', (req, res) => {
 
             <hr style="border-color: #383a40; margin: 30px 0;">
 
-            <h3>📋 قائمة الأوامر المتاحة في البوت وشرحها:</h3>
-            <div style="background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40; line-height: 1.8;">
+            <h3>📋 قائمة الأوامر الكاملة المتاحة في البوت وشرحها:</h3>
+            <div style="background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40; max-height: 450px; overflow-y: auto; line-height: 1.8;">
                 <p><b>🛡️ أوامر الإدارة (Moderation):</b><br>
                 • <code>${s.prefix}ban [@العضو] [السبب]</code> - لحظر العضو مع تنبيه وتوثيق.<br>
                 • <code>${s.prefix}unban [آيدي العضو]</code> - لفك الحظر عن العضو.<br>
@@ -160,6 +160,21 @@ app.get('/control/:guildId/:section', (req, res) => {
                 • <code>${s.prefix}say [النص]</code> - لجعل البوت يكرر كلامك.<br>
                 • <code>${s.prefix}ann [النص]</code> - لإرسال إعلان رسمي مع منشن عام.<br>
                 • <code>${s.prefix}ping</code> - لفحص سرعة استجابة البوت.</p>
+
+                <p><b>⚙️ أوامر النظام والإعدادات:</b><br>
+                • <code>${s.prefix}settings</code> - عرض إعدادات السيرفر الحالية.<br>
+                • <code>${s.prefix}prefix [الرمز الجديد]</code> - تغيير بادئة البوت من الديسكورد.<br>
+                • <code>${s.prefix}help</code> - إرسال قائمة المساعدة الخاصة بالبوت.</p>
+
+                <p><b>🎮 ألعاب وتفاعل:</b><br>
+                • <code>${s.prefix}roll</code> - رمي النرد عشوائياً.<br>
+                • <code>${s.prefix}coinflip</code> - لعبة وجه أو كتابة.<br>
+                • <code>${s.prefix}rank</code> - عرض رتبتك وتفاعلك.</p>
+
+                <p><b>🛡️ الحماية والأمان:</b><br>
+                • <code>${s.prefix}anti-spam [on/off]</code> - التحكم بحماية السبام.<br>
+                • <code>${s.prefix}anti-links [on/off]</code> - التحكم بحظر الروابط.<br>
+                • <code>${s.prefix}logs-channel [#الروم]</code> - تحديد روم السجلات.</p>
             </div>
         `;
     } else if (section === 'racingmaster') {
