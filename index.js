@@ -4,6 +4,14 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
+// التقاط أي خطأ مفاجئ لكي لا ينطفئ البوت صامتاً
+process.on('uncaughtException', (err) => {
+    console.error('❌ خطأ غير معالج (Uncaught Exception):', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ رفض غير معالج (Unhandled Rejection) في:', promise, 'السبب:', reason);
+});
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -40,7 +48,7 @@ try {
         return done(null, profile);
     }));
 } catch (err) {
-    console.error('خطأ في تهيئة استراتيجية ديسكورد:', err);
+    console.error('خطأ في إعداد استراتيجية ديسكورد:', err);
 }
 
 passport.serializeUser((user, done) => done(null, user));
@@ -61,13 +69,17 @@ const commandList = [
 
 const commands = commandList.map(name => new SlashCommandBuilder().setName(name).setDescription(`أمر ${name} الخاص بإدارة السيرفر والترفيه`)).toJSON();
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
-        await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
-    } catch (error) { console.error(error); }
+        if (process.env.DISCORD_TOKEN) {
+            const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+            await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
+            console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
+        }
+    } catch (error) { 
+        console.error('خطأ في تسجيل الأوامر:', error); 
+    }
 
     setInterval(() => {
         const newsItems = [
@@ -324,13 +336,16 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-if (!process.env.DISCORD_TOKEN) {
-    console.error('❌ خطأ فادح: متغير البيئة DISCORD_TOKEN غير معرف في لوحة Render!');
-} else {
+// تسجيل دخول البوت بشكل آمن
+if (process.env.DISCORD_TOKEN) {
     client.login(process.env.DISCORD_TOKEN).catch(err => {
-        console.error('❌ فشل تسجيل دخول البوت بالتوكن المدخل:', err);
+        console.error('❌ فشل تسجيل دخول البوت:', err);
     });
+} else {
+    console.error('❌ متغير DISCORD_TOKEN غير موجود!');
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 لوحة التحكم الشاملة تعمل بنجاح تام على المنفذ ${PORT}!`));
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 السيرفر ولوحة التحكم يعملان بكامل طاقتهم على المنفذ ${PORT}`);
+});
