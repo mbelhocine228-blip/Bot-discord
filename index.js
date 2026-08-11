@@ -45,7 +45,6 @@ app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }),
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const guildSettings = {};
-const userMessageTracker = new Map();
 const sentRacingMasterNews = new Set();
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
@@ -63,7 +62,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h2>RKS•ＰＯＷＥＲ</h2>
-                <p>لوحة التحكم الشاملة لكافة أقسام السيرفر</p>
+                <p>لوحة التحكم الشاملة لجميع أقسام السيرفر</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد 🎮</a>
                 <a href="${INVITE_URL}" target="_blank" class="btn btn-invite">إضافة البوت لسيرفرك ➕</a>
             </div>
@@ -105,7 +104,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// --- لوحة التحكم التفصيلية والكاملة ---
+// --- لوحة التحكم التفصيلية والكاملة (بكل الأقسام وقائمة الأوامر) ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -135,7 +134,7 @@ app.get('/control/:guildId/:section', (req, res) => {
 
     if (section === 'commands') {
         mainContent = `
-            <h2>⚡ الأوامر الكاملة (30 أمراً متكاملاً)</h2>
+            <h2>⚡ الأوامر الكاملة للبوت (30 أمراً متكاملاً)</h2>
             <p>إدارة بادئة الأوامر (Prefix) الخاصة بالبوت:</p>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
@@ -144,6 +143,24 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <input type="text" name="prefix" value="${s.prefix}" style="padding: 10px; width: 200px; background: #1e1f22; color: white; border: 1px solid #383a40; border-radius: 6px;">
                 <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ البادئة 💾</button>
             </form>
+
+            <hr style="border-color: #383a40; margin: 30px 0;">
+
+            <h3>📋 قائمة الأوامر المتاحة في البوت وشرحها:</h3>
+            <div style="background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40; line-height: 1.8;">
+                <p><b>🛡️ أوامر الإدارة (Moderation):</b><br>
+                • <code>${s.prefix}ban [@العضو] [السبب]</code> - لحظر العضو مع تنبيه وتوثيق.<br>
+                • <code>${s.prefix}unban [آيدي العضو]</code> - لفك الحظر عن العضو.<br>
+                • <code>${s.prefix}kick [@العضو] [السبب]</code> - لطرد العضو.<br>
+                • <code>${s.prefix}mute [@العضو] [السبب]</code> - لكتم العضو.<br>
+                • <code>${s.prefix}unmute [@العضو]</code> - لفك الكتم عن العضو.<br>
+                • <code>${s.prefix}clear [العدد]</code> - لمسح الرسائل بسرعة.</p>
+                
+                <p><b>📢 أوامر التفاعل والنشر:</b><br>
+                • <code>${s.prefix}say [النص]</code> - لجعل البوت يكرر كلامك.<br>
+                • <code>${s.prefix}ann [النص]</code> - لإرسال إعلان رسمي مع منشن عام.<br>
+                • <code>${s.prefix}ping</code> - لفحص سرعة استجابة البوت.</p>
+            </div>
         `;
     } else if (section === 'racingmaster') {
         mainContent = `<h2>🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)</h2>
