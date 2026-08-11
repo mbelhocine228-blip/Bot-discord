@@ -23,6 +23,7 @@ app.use(session({
     saveUninitialized: false,
     cookie: { secure: true, httpOnly: true, sameSite: 'lax' }
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -36,7 +37,7 @@ passport.use(new DiscordStrategy({
 }));
 
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(obj, obj));
+passport.deserializeUser((user, done) => done(null, user));
 
 app.get('/login', passport.authenticate('discord'));
 
@@ -150,6 +151,11 @@ app.post('/send', async (req, res) => {
         }
     } catch (e) {}
     res.redirect(`/control/${req.body.guildId}`);
+});
+
+app.use((err, req, res, next) => {
+    console.error("خطأ في الخادم:", err);
+    res.status(500).send(`حدث خطأ داخلي في الخادم: ${err.message}`);
 });
 
 const PORT = process.env.PORT || 3000;
