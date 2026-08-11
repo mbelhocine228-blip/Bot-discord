@@ -18,7 +18,7 @@ const client = new Client({
 
 app.use(express.urlencoded({ extended: true }));
 app.use(session({ 
-    secret: 'rks-koya-dashboard-secret-999', 
+    secret: 'rks-koya-ultimate-secret-777', 
     resave: false, 
     saveUninitialized: false,
     cookie: { secure: true, httpOnly: true, sameSite: 'lax' }
@@ -61,11 +61,11 @@ app.get('/', (req, res) => {
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>RKS•ＰＯＷＥＲ Koya Dashboard</title>
+            <title>RKS•ＰＯＷＥＲ Koya Ultimate Dashboard</title>
             <style>
                 body { background-color: #2f3136; color: #ffffff; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                .card { background: #36393f; padding: 40px; border-radius: 12px; text-align: center; border: 1px solid #202225; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 350px; }
-                h1 { color: #ffffff; margin-bottom: 10px; font-size: 24px; }
+                .card { background: #36393f; padding: 40px; border-radius: 12px; text-align: center; border: 1px solid #202225; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 380px; }
+                h1 { color: #ffffff; margin-bottom: 10px; font-size: 26px; }
                 p { color: #b9bbbe; margin-bottom: 30px; font-size: 14px; }
                 .btn { background-color: #5865F2; color: white; padding: 12px 24px; font-size: 16px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; width: 100%; box-sizing: border-box; }
                 .btn:hover { background-color: #4752C4; }
@@ -74,7 +74,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h1>RKS•ＰＯＷＥＲ</h1>
-                <p>لوحة تحكم Koya المتقدمة</p>
+                <p>لوحة التحكم الشاملة والمطورة Koya</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد</a>
             </div>
         </body>
@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// قائمة اختيار السيرفرات
+// قائمة السيرفرات
 app.get('/dashboard', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     
@@ -90,7 +90,7 @@ app.get('/dashboard', (req, res) => {
     client.guilds.cache.forEach(guild => {
         let iconUrl = guild.iconURL() ? guild.iconURL() : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
         guildsHtml += `
-            <a href="/control/${guild.id}/autoroles" style="text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; background: #2f3136; padding: 15px; border-radius: 12px; border: 1px solid #202225; width: 120px;">
+            <a href="/control/${guild.id}/autoroles" style="text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; background: #2f3136; padding: 15px; border-radius: 12px; border: 1px solid #202225; width: 130px;">
                 <img src="${iconUrl}" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #5865F2; margin-bottom: 10px;">
                 <span style="font-size: 14px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${guild.name}</span>
             </a>
@@ -105,7 +105,7 @@ app.get('/dashboard', (req, res) => {
             <title>اختر السيرفر</title>
             <style>
                 body { background-color: #2f3136; color: white; font-family: Arial, sans-serif; margin: 0; padding: 40px; }
-                .container { max-width: 800px; margin: auto; background: #36393f; padding: 30px; border-radius: 12px; border: 1px solid #202225; }
+                .container { max-width: 850px; margin: auto; background: #36393f; padding: 30px; border-radius: 12px; border: 1px solid #202225; }
                 h2 { margin-top: 0; color: #fff; }
                 .grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 25px; }
                 .logout { display: inline-block; margin-top: 30px; color: #ed4245; text-decoration: none; font-weight: bold; font-size: 14px; }
@@ -113,8 +113,8 @@ app.get('/dashboard', (req, res) => {
         </head>
         <body>
             <div class="container">
-                <h2>مرحباً، ${req.user.username}!</h2>
-                <p style="color: #b9bbbe;">اختر السيرفر للبدء في إدارة أقسام Koya:</p>
+                <h2>مرحباً بك، ${req.user.username} 👋</h2>
+                <p style="color: #b9bbbe;">اختر السيرفر المطلوب للبدء في إدارة الأوامر والإعدادات:</p>
                 <div class="grid">${guildsHtml || '<p style="color: #ed4245;">لا توجد سيرفرات مشتركة.</p>'}</div>
                 <br><a href="/logout" class="logout">تسجيل الخروج 🚪</a>
             </div>
@@ -123,7 +123,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// لوحة التحكم الشاملة (مطابقة لـ Koya.gg)
+// لوحة التحكم بالأقسام والأوامر المتعددة
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -136,75 +136,105 @@ app.get('/control/:guildId/:section', (req, res) => {
         contentHtml = `
             <div class="setting-card">
                 <div class="setting-title">➕ Auto Rôles (Rôles Automatiques)</div>
-                <div class="setting-desc">أضف رتب تلقائية يتم منحها للأعضاء فور انضمامهم للسيرفر.</div>
+                <div class="setting-desc">تحديد الرتب التي يتم منحها تلقائياً لكل عضو جديد ينضم إلى السيرفر.</div>
                 <form action="/action/save" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    <input type="text" name="roleName" placeholder="اسم الرتبة أو الـ ID...">
-                    <button type="submit" class="btn-apply">إضافة رتبة تلقائية 💾</button>
+                    <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">اسم الرتبة أو الـ ID:</label>
+                    <input type="text" name="roleName" placeholder="مثال: Member أو ID الرتبة...">
+                    <button type="submit" class="btn-apply">إضافة وحفظ الرتبة 💾</button>
+                </form>
+            </div>
+        `;
+    } else if (section === 'welcome') {
+        contentHtml = `
+            <div class="setting-card">
+                <div class="setting-title">👋 Message de Bienvenue (ترحيب بالأعضاء)</div>
+                <div class="setting-desc">تخصيص رسالة ترحيبية تفاعلية مع إضافات الـ Embed والمنشن.</div>
+                <form action="/action/save" method="POST">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">نص الترحيب:</label>
+                    <textarea name="welcomeText" rows="3">مرحباً بك {user.mention} في سيرفر **{server.name}**!</textarea>
+                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin:15px 0; cursor:pointer;">
+                        <input type="checkbox" name="useEmbedWelcome" style="width:18px; height:18px;"> تفعيل تصميم الـ Embed للترحيب
+                    </label>
+                    <button type="submit" class="btn-apply">حفظ إعدادات الترحيب 🚀</button>
+                </form>
+            </div>
+        `;
+    } else if (section === 'reactions') {
+        contentHtml = `
+            <div class="setting-card">
+                <div class="setting-title">⭐ Rôles Réaction (الأخذ بالرتب عبر التفاعل)</div>
+                <div class="setting-desc">إعداد رسالة الأزرار أو الإيموجي ليحصل الأعضاء على رتبهم بأنفسهم.</div>
+                <form action="/action/save" method="POST">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <input type="text" name="reactChannel" placeholder="معرف القناة (Channel ID)...">
+                    <input type="text" name="reactEmoji" placeholder="الإيموجي المخصص (مثال: 🔥)...">
+                    <input type="text" name="reactRole" placeholder="اسم الرتبة أو ID الرتبة...">
+                    <button type="submit" class="btn-apply">إنشاء تفاعل الرتب 🎯</button>
                 </form>
             </div>
         `;
     } else if (section === 'banmsg') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">📢 Annonces > Message de Banissement</div>
-                <div class="setting-desc">تخصيص رسالة وإعدادات البان المتقدمة مع دعم الـ Embeds والـ Variables.</div>
+                <div class="setting-title">📢 Message de Banissement (رسائل الحظر)</div>
+                <div class="setting-desc">تخصيص الإشعارات الموجهة عند حظر أي عضو من السيرفر.</div>
                 <form action="/action/banmsg" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    
-                    <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">نص الرسالة الأساسية:</label>
+                    <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">رسالة الحظر:</label>
                     <textarea name="banText" rows="3">{user.mention} a été banni de **{server.name}**.</textarea>
-                    
-                    <div style="margin: 20px 0; border-top: 1px solid #202225; padding-top: 15px;">
-                        <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:15px; cursor:pointer;">
-                            <input type="checkbox" name="useEmbed" style="width:18px; height:18px;"> تفعيل إرسال Embed مع الرسالة
-                        </label>
-                        
-                        <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">عنوان الـ Embed (Titre):</label>
-                        <input type="text" name="embedTitle" placeholder="تبيان سبب الحظر أو إشعار البان">
-                        
-                        <label style="font-size:13px; color:#b9bbbe; display:block; margin-bottom:5px;">وصف الـ Embed (Description):</label>
-                        <textarea name="embedDesc" rows="3" placeholder="تفاصيل إضافية حول الحظر..."></textarea>
-                    </div>
-
-                    <button type="submit" class="btn-apply">حفظ الإعدادات 🚀</button>
+                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin:15px 0; cursor:pointer;">
+                        <input type="checkbox" name="useEmbed" style="width:18px; height:18px;"> إرسال Embed مخصص للحظر
+                    </label>
+                    <input type="text" name="embedTitle" placeholder="عنوان الـ Embed (Titre)..." style="margin-bottom:10px;">
+                    <textarea name="embedDesc" rows="2" placeholder="وصف الحظر (Description)..."></textarea>
+                    <button type="submit" class="btn-apply">حفظ رسالة الحظر 🛡️</button>
                 </form>
             </div>
         `;
     } else if (section === 'automod') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">🛡️ Auto Mod & Sécurité</div>
-                <div class="setting-desc">تصفية المحتوى، منع السبام، والروابط المسيئة تلقائياً.</div>
+                <div class="setting-title">🛡️ Auto Mod & Sécurité (الحماية التلقائية)</div>
+                <div class="setting-desc">منع السبام، الكلمات المسيئة، والروابط الخارجية الضارة فوراً.</div>
                 <form action="/action/save" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:15px; cursor:pointer;">
-                        <input type="checkbox" name="antiSpam" style="width:18px; height:18px;"> تفعيل نظام فلاتر السبام التلقائي
+                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:12px; cursor:pointer;">
+                        <input type="checkbox" name="antiSpam" style="width:18px; height:18px;"> منع السبام والتكرار السريع للمنشورات
+                    </label>
+                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:12px; cursor:pointer;">
+                        <input type="checkbox" name="antiLinks" style="width:18px; height:18px;"> حظر روابط الدعوات الخارجية والروابط المشبوهة
                     </label>
                     <label style="display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:15px; cursor:pointer;">
-                        <input type="checkbox" name="antiLinks" style="width:18px; height:18px;"> منع نشر الروابط الخارجية
+                        <input type="checkbox" name="antiBadWords" style="width:18px; height:18px;"> تصفية الشتائم والكلمات البذيئة تلقائياً
                     </label>
-                    <button type="submit" class="btn-apply">حفظ الفلاتر 🔒</button>
+                    <button type="submit" class="btn-apply">تطبيق إعدادات الحماية 🔒</button>
                 </form>
             </div>
         `;
     } else if (section === 'logs') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">📋 Logs (سجلات الحركات والأحداث)</div>
-                <div class="setting-desc">مراقبة دخول الأعضاء، تعديل الرسائل، وحظر المستخدمين.</div>
-                <p style="color: #b9bbbe; font-size: 14px;">السجلات مفعلة وتعمل بالخلفية لتوثيق نشاط السيرفر.</p>
+                <div class="setting-title">📋 Logs (سجلات الأحداث والمراقبة)</div>
+                <div class="setting-desc">تسجيل كل حركة في السيرفر (تعديل الرسائل، دخول وخروج الأعضاء، الحظر).</div>
+                <form action="/action/save" method="POST">
+                    <input type="hidden" name="guildId" value="${guild.id}">
+                    <input type="text" name="logChannel" placeholder="معرف قناة السجلات (Log Channel ID)...">
+                    <button type="submit" class="btn-apply">تفعيل قناة السجلات 📊</button>
+                </form>
             </div>
         `;
     } else if (section === 'social') {
         contentHtml = `
             <div class="setting-card">
-                <div class="setting-title">📡 Flux Sociaux (YouTube, Twitch, Kick)</div>
-                <div class="setting-desc">إشعارات البثوث ومنشورات المنصات الخارجية تلقائياً في السيرفر.</div>
+                <div class="setting-title">📡 Flux Sociaux (إشعارات المنصات الخارجية)</div>
+                <div class="setting-desc">إرسال إشعارات تلقائية عند بدء بث جديد على يوتيوب أو تويتش أو كيك.</div>
                 <form action="/action/save" method="POST">
                     <input type="hidden" name="guildId" value="${guild.id}">
-                    <input type="text" name="socialChannel" placeholder="معرف القناة النصية لإرسال الإشعارات...">
-                    <button type="submit" class="btn-apply">حفظ القناة 📢</button>
+                    <input type="text" name="socialChannel" placeholder="قناة إرسال الإشعارات...">
+                    <input type="text" name="creatorLink" placeholder="رابط القناة أو حساب البث...">
+                    <button type="submit" class="btn-apply">حفظ ربط المنصة 🔔</button>
                 </form>
             </div>
         `;
@@ -218,9 +248,9 @@ app.get('/control/:guildId/:section', (req, res) => {
             <title>إدارة ${guild.name} - Koya Dashboard</title>
             <style>
                 body { background-color: #2f3136; color: white; font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
-                .sidebar { width: 280px; background: #202225; padding: 20px; display: flex; flex-direction: column; gap: 5px; border-left: 1px solid #2f3136; box-sizing: border-box; overflow-y: auto; }
-                .sidebar h3 { font-size: 12px; color: #8e9297; margin: 15px 0 5px 0; text-transform: uppercase; }
-                .sidebar a { color: #b9bbbe; text-decoration: none; padding: 10px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+                .sidebar { width: 290px; background: #202225; padding: 20px; display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #2f3136; box-sizing: border-box; overflow-y: auto; }
+                .sidebar h3 { font-size: 11px; color: #8e9297; margin: 15px 0 5px 0; text-transform: uppercase; }
+                .sidebar a { color: #b9bbbe; text-decoration: none; padding: 9px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
                 .sidebar a:hover, .sidebar a.active { background: #393c43; color: #ffffff; }
                 .content { flex: 1; padding: 40px; overflow-y: auto; background: #36393f; }
                 .setting-card { background: #2f3136; padding: 25px; border-radius: 8px; border: 1px solid #202225; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
@@ -235,9 +265,13 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="sidebar">
                 <h3 style="margin-top:0;">Rôles</h3>
                 <a href="/control/${guild.id}/autoroles" class="${section === 'autoroles' ? 'active' : ''}">➕ Auto Rôles</a>
+                <a href="/control/${guild.id}/reactions" class="${section === 'reactions' ? 'active' : ''}">⭐ Rôles Réaction</a>
                 
-                <h3>Modération & Annonces</h3>
+                <h3>Accueil & Annonces</h3>
+                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">👋 Message de Bienvenue</a>
                 <a href="/control/${guild.id}/banmsg" class="${section === 'banmsg' ? 'active' : ''}">📢 Message de Banissement</a>
+                
+                <h3>Modération & Logs</h3>
                 <a href="/control/${guild.id}/automod" class="${section === 'automod' ? 'active' : ''}">🛡️ Auto Mod</a>
                 <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 Logs</a>
 
@@ -258,7 +292,6 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// حفظ البيانات ومعالجة إرسال الـ Embeds المخصصة
 app.post('/action/save', async (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     res.redirect(req.headers.referer || '/dashboard');
@@ -285,5 +318,6 @@ app.post('/action/banmsg', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Koya-style Dashboard running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Koya Ultimate Dashboard running on port ${PORT}`));
 client.login(process.env.DISCORD_TOKEN);
+ج
