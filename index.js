@@ -320,4 +320,3 @@ app.post('/action/banmsg', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Koya Ultimate Dashboard running on port ${PORT}`));
 client.login(process.env.DISCORD_TOKEN);
-ج
