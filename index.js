@@ -1,19 +1,25 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-// التقاط أي خطأ مفاجئ لكي لا ينطفئ البوت صامتاً
+// التقاط الأخطاء لضمان عدم توقف السيرفر صامتاً
 process.on('uncaughtException', (err) => {
-    console.error('❌ خطأ غير معالج (Uncaught Exception):', err);
+    console.error('❌ خطأ غير معالج:', err);
 });
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ رفض غير معالج (Unhandled Rejection) في:', promise, 'السبب:', reason);
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ رفض غير معالج:', reason);
 });
 
 const app = express();
 app.set('trust proxy', 1);
+
+// تشغيل السيرفر أولاً فوراً لترضى منصة Render ولا تغلق التطبيق
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 السيرفر يعمل الآن بقوة على المنفذ ${PORT}`);
+});
 
 const client = new Client({ 
     intents: [
@@ -48,7 +54,7 @@ try {
         return done(null, profile);
     }));
 } catch (err) {
-    console.error('خطأ في إعداد استراتيجية ديسكورد:', err);
+    console.error('خطأ في إعداد ديسكورد استراتيجي:', err);
 }
 
 passport.serializeUser((user, done) => done(null, user));
@@ -70,12 +76,12 @@ const commandList = [
 const commands = commandList.map(name => new SlashCommandBuilder().setName(name).setDescription(`أمر ${name} الخاص بإدارة السيرفر والترفيه`)).toJSON();
 
 client.once('ready', async () => {
-    console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
+    console.log(`✅ البوت متصل بنجاح كـ: ${client.user.tag}`);
     try {
         if (process.env.DISCORD_TOKEN) {
             const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
             await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-            console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
+            console.log('🔄 تم تسجيل الأوامر بنجاح.');
         }
     } catch (error) { 
         console.error('خطأ في تسجيل الأوامر:', error); 
@@ -83,10 +89,10 @@ client.once('ready', async () => {
 
     setInterval(() => {
         const newsItems = [
-            "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
-            "🔥 **بطولة كلان RKS•ＰＯＷＥＲ:** استعدوا يا أبطال، التحدي القادم سيكون على سيارات الفئة S الأسبوع الحالي!",
-            "⚙️ **صيانة وإضافات توربو:** الشركة المطورة أعلنت عن سيارات جديدة كلياً ستنضم للعبة قريباً، كونوا على جاهزية!",
-            "🏆 **نصيحة للمحترفين:** ضبط إعدادات العجلات والإطارات سيمنحك أفضلية كبرى في المنعطفات الحادة."
+            "🏎️ **تحديث حلبات Racing Master الجديد:** مسارات سباق قوية جداً وخيارات تعديل جبارة للمحركات والنيترو!",
+            "🔥 **بطولة كلان RKS•ＰＯＷＥＲ:** التحدي القادم سيكون على سيارات الفئة S الأسبوع الحالي!",
+            "⚙️ **صيانة وإضافات توربو:** سيارات جديدة كلياً ستنضم للعبة قريباً، كونوا على جاهزية!",
+            "🏆 **نصيحة للمحترفين:** ضبط إعدادات العجلات سيمنحك أفضلية كبرى في المنعطفات الحادة."
         ];
         const randomNews = newsItems[Math.floor(Math.random() * newsItems.length)];
 
@@ -97,7 +103,7 @@ client.once('ready', async () => {
                     const channel = guild.channels.cache.get(settings.newsChannelId);
                     if (channel) {
                         const embed = new EmbedBuilder()
-                            .setTitle('🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)')
+                            .setTitle('🏎️ أخبار Racing Master التلقائية')
                             .setDescription(randomNews)
                             .setColor('#FF4500')
                             .setTimestamp();
@@ -110,29 +116,8 @@ client.once('ready', async () => {
 });
 
 const commonStyle = `
-    body {
-        background: linear-gradient(135deg, #0a0b10 0%, #151828 50%, #221535 100%);
-        color: #ffffff;
-        min-height: 100vh;
-        margin: 0;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        display: flex;
-        flex-direction: row-reverse;
-    }
-    .sidebar {
-        width: 280px;
-        background: rgba(18, 20, 28, 0.95);
-        backdrop-filter: blur(15px);
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        box-shadow: -5px 0 25px rgba(0,0,0,0.5);
-        height: 100vh;
-        position: sticky;
-        top: 0;
-        overflow-y: auto;
-    }
+    body { background: linear-gradient(135deg, #0a0b10 0%, #151828 50%, #221535 100%); color: #ffffff; min-height: 100vh; margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: row-reverse; }
+    .sidebar { width: 280px; background: rgba(18, 20, 28, 0.95); backdrop-filter: blur(15px); border-right: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; padding: 20px; box-shadow: -5px 0 25px rgba(0,0,0,0.5); height: 100vh; position: sticky; top: 0; overflow-y: auto; }
     .sidebar h3 { color: #FFD700; font-size: 18px; margin-bottom: 20px; text-align: center; }
     .sidebar a { color: #b9bbbe; text-decoration: none; padding: 12px 15px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; transition: 0.3s; display: block; }
     .sidebar a:hover, .sidebar a.active { background: rgba(88, 101, 242, 0.2); color: #ffffff; border-left: 4px solid #5865F2; }
@@ -218,7 +203,7 @@ app.get('/control/:guildId/:section', (req, res) => {
         });
 
         sectionContent = `
-            <h3 style="color:#FFD700;">⚡ إدارة وتفعيل أكثر من 30 أمر</h3>
+            <h3 style="color:#FFD700;">⚡ إدارة وتفعيل الأوامر</h3>
             <p style="color:#b9bbbe; font-size:14px;">قم بتشغيل أو إيقاف أي أمر حسب رغبتك في سيرفرك:</p>
             <form method="POST">
                 <div class="switch-grid">${switchesHtml}</div>
@@ -237,7 +222,7 @@ app.get('/control/:guildId/:section', (req, res) => {
 
         sectionContent = `
             <h3 style="color:#FFD700;">🏎️ إعدادات أخبار Racing Master</h3>
-            <p style="color:#b9bbbe; font-size:14px;">حدد الروم المخصص لإرسال الأخبار التلقائية كل 20 دقيقة:</p>
+            <p style="color:#b9bbbe; font-size:14px;">حدد الروم المخصص لإرسال الأخبار التلقائية:</p>
             <form method="POST">
                 <label style="font-size:13px; color:#FFD700;">اختر الروم:</label>
                 <select name="newsChannelId">${channelsHtml}</select>
@@ -249,8 +234,8 @@ app.get('/control/:guildId/:section', (req, res) => {
         sectionContent = `
             <h3 style="color:#FFD700;">📊 إحصائيات السيرفر</h3>
             <div class="section-box">
-                <p>👥 عدد أعضاء السيرفر: <strong>${guild.memberCount}</strong></p>
-                <p>📁 عدد الرومات الإجمالي: <strong>${guild.channels.cache.size}</strong></p>
+                <p>👥 أعضاء السيرفر: <strong>${guild.memberCount}</strong></p>
+                <p>📁 عدد الرومات: <strong>${guild.channels.cache.size}</strong></p>
                 <p>👑 صاحب السيرفر (ID): <strong>${guild.ownerId}</strong></p>
             </div>
         `;
@@ -258,42 +243,28 @@ app.get('/control/:guildId/:section', (req, res) => {
     else if (section === 'roles') {
         sectionContent = `
             <h3 style="color:#FFD700;">🛡️ الرتب والصلاحيات</h3>
-            <div class="section-box">
-                <p>🔒 صلاحيات المشرفين والحماية مؤمنة بالكامل عبر رتب النظام.</p>
-            </div>
+            <div class="section-box"><p>🔒 الصلاحيات مؤمنة بالكامل عبر النظام.</p></div>
         `;
     } 
     else if (section === 'logs') {
         sectionContent = `
-            <h3 style="color:#FFD700;">📋 سجلات الحماية والمراقبة (Logs)</h3>
-            <div class="section-box">
-                <p>🟢 نظام الرصد والتسجيل يعمل بفاعلية لمتابعة الطرد والحظر.</p>
-            </div>
+            <h3 style="color:#FFD700;">📋 السجلات والحماية</h3>
+            <div class="section-box"><p>🟢 نظام الرصد والتسجيل يعمل بفاعلية.</p></div>
         `;
     }
 
     res.send(`
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>إدارة ${guild.name} - ${section}</title>
-            <style>${commonStyle}</style>
-        </head>
+        <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>إدارة ${guild.name}</title><style>${commonStyle}</style></head>
         <body>
             <div class="main-content">
                 <div class="glass-card">
                     <div style="display:flex; align-items:center; gap:15px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:15px;">
                         <img src="${guildIcon}" style="width:65px;height:65px;border-radius:50%;object-fit:cover;border:2px solid #FFD700;">
-                        <div>
-                            <h2 style="color:#FFD700; margin:0; font-size:20px;">${guild.name}</h2>
-                            <span style="color:#23a55a; font-size:12px;">● متصل باللوحة بنجاح</span>
-                        </div>
+                        <div><h2 style="color:#FFD700; margin:0; font-size:20px;">${guild.name}</h2><span style="color:#23a55a; font-size:12px;">● متصل باللوحة بنجاح</span></div>
                     </div>
-                    ${saved ? '<div style="background:rgba(35,165,90,0.2); border:1px solid #23a55a; color:#23a55a; padding:10px; border-radius:8px; margin-bottom:15px; text-align:center; font-weight:bold;">✅ تم حفظ التعديلات بنجاح!</div>' : ''}
+                    ${saved ? '<div style="background:rgba(35,165,90,0.2); border:1px solid #23a55a; color:#23a55a; padding:10px; border-radius:8px; margin-bottom:15px; text-align:center; font-weight:bold;">✅ تم الحفظ بنجاح!</div>' : ''}
                     ${sectionContent}
-                    <br>
-                    <a href="/dashboard" class="btn-discord" style="background:rgba(237,66,69,0.2); color:#ed4245; border:1px solid rgba(237,66,69,0.3); margin-top:15px; text-align:center; display:block;">← العودة لاختيار السيرفرات</a>
+                    <br><a href="/dashboard" class="btn-discord" style="background:rgba(237,66,69,0.2); color:#ed4245; border:1px solid rgba(237,66,69,0.3); margin-top:15px; text-align:center; display:block;">← العودة للسيرفرات</a>
                 </div>
             </div>
             <div class="sidebar">
@@ -304,8 +275,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <a href="/control/${guild.id}/roles" class="${section === 'roles' ? 'active' : ''}">🛡️ الرتب والصلاحيات</a>
                 <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 السجلات والحماية</a>
             </div>
-        </body>
-        </html>
+        </body></html>
     `);
 });
 
@@ -315,37 +285,32 @@ client.on('interactionCreate', async interaction => {
 
     let settings = guildSettings.get(guild.id);
     if (settings && settings.disabledCommands && settings.disabledCommands.includes(commandName)) {
-        return interaction.reply({ content: '❌ هذا الأمر معطل حالياً من قِبل إدارة السيرفر في لوحة التحكم.', ephemeral: true });
+        return interaction.reply({ content: '❌ هذا الأمر معطل من إدارة السيرفر.', ephemeral: true });
     }
 
     try {
         if (commandName === 'ping') {
-            await interaction.reply({ content: `🏓 Pong! سرعة استجابة البوت: ${client.ws.ping}ms` });
+            await interaction.reply({ content: `🏓 Pong! سرعة الاستجابة: ${client.ws.ping}ms` });
         } else if (commandName === 'racingnews') {
-            const embed = new EmbedBuilder().setTitle('🏎️ آخر أخبار Racing Master').setDescription('التحديثات القادمة تحمل سيارات خارقة وحلبات ليلية مذهلة!').setColor('#FF4500');
+            const embed = new EmbedBuilder().setTitle('🏎️ آخر أخبار Racing Master').setDescription('تحديثات حصرية قادمة قريباً!').setColor('#FF4500');
             await interaction.reply({ embeds: [embed] });
         } else if (commandName === 'rockstats') {
-            const embed = new EmbedBuilder().setTitle('🛡️ إحصائيات كلان RKS•ＰＯＷＥＲ').setDescription('الكلان جاهز للبطولات الكبرى والسيطرة المطلقة!').setColor('#E74C3C');
+            const embed = new EmbedBuilder().setTitle('🛡️ إحصائيات كلان RKS•ＰＯＷＥＲ').setDescription('جاهزون للبطولات الكبرى!').setColor('#E74C3C');
             await interaction.reply({ embeds: [embed] });
         } else {
-            await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح في السيرفر!`, ephemeral: true });
+            await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
     } catch (err) {
         console.error(err);
-        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر.', ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: '❌ حدث خطأ.', ephemeral: true }).catch(() => {});
     }
 });
 
-// تسجيل دخول البوت بشكل آمن
+// تسجيل دخول البوت أخيرًا
 if (process.env.DISCORD_TOKEN) {
     client.login(process.env.DISCORD_TOKEN).catch(err => {
         console.error('❌ فشل تسجيل دخول البوت:', err);
     });
 } else {
-    console.error('❌ متغير DISCORD_TOKEN غير موجود!');
+    console.error('❌ متغير DISCORD_TOKEN غير معرف!');
 }
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 السيرفر ولوحة التحكم يعملان بكامل طاقتهم على المنفذ ${PORT}`);
-});
