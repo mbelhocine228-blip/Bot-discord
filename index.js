@@ -44,7 +44,7 @@ app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
-// تخزين الإعدادات الشاملة
+// تخزين الإعدادات الشاملة لكل سيرفر
 const guildSettings = {};
 const userMessageTracker = new Map();
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
@@ -63,7 +63,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="card">
                 <h2>RKS•ＰＯＷＥＲ</h2>
-                <p>لوحة التحكم الشاملة مع إدارة الأوامر</p>
+                <p>لوحة التحكم الشاملة مع جميع الأقسام والحماية</p>
                 <a href="/login" class="btn">تسجيل الدخول عبر ديسكورد 🎮</a>
                 <a href="${INVITE_URL}" target="_blank" class="btn btn-invite">إضافة البوت لسيرفرك ➕</a>
             </div>
@@ -78,7 +78,7 @@ app.get('/dashboard', (req, res) => {
     client.guilds.cache.forEach(guild => {
         let iconUrl = guild.iconURL() ? guild.iconURL() : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
         guildsHtml += `
-            <a href="/control/${guild.id}/welcome" style="text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; background: #36393f; padding: 15px; border-radius: 12px; border: 1px solid #202225; width: 140px;">
+            <a href="/control/${guild.id}/commands" style="text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; background: #36393f; padding: 15px; border-radius: 12px; border: 1px solid #202225; width: 140px;">
                 <img src="${iconUrl}" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
                 <span style="font-size: 14px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${guild.name}</span>
             </a>
@@ -105,7 +105,7 @@ app.get('/dashboard', (req, res) => {
     `);
 });
 
-// --- لوحة التحكم مع قسم الأوامر المخصص ---
+// --- لوحة التحكم الشاملة بكل الأقسام ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -113,14 +113,22 @@ app.get('/control/:guildId/:section', (req, res) => {
     
     if (!guildSettings[guild.id]) {
         guildSettings[guild.id] = { 
+            prefix: '!',
             welcomeMessage: 'مرحباً بك في السيرفر!',
             autoRoleName: '@Team Rocks',
-            prefix: '!',
             spamEnabled: false,
             spamLimit: 5,
             badLinksEnabled: false,
             blacklistedDomains: 'discord.gg, t.me',
-            honeypotChannelId: ''
+            honeypotEnabled: false,
+            honeypotChannelId: 'ALL',
+            vocauxEnabled: false,
+            starboardEnabled: false,
+            anniversairesEnabled: false,
+            minijeuxEnabled: false,
+            rolesReactionEnabled: false,
+            rolesTemporairesEnabled: false,
+            logsEnabled: false
         };
     }
     const settings = guildSettings[guild.id];
@@ -128,21 +136,10 @@ app.get('/control/:guildId/:section', (req, res) => {
 
     let mainContent = '';
 
-    if (section === 'welcome') {
-        mainContent = `
-            <h2>📢 رسائل الترحيب والإعلانات</h2>
-            <form action="/action/save" method="POST">
-                <input type="hidden" name="guildId" value="${guild.id}">
-                <input type="hidden" name="section" value="welcome">
-                <label style="display:block; margin-top:15px; font-weight:bold;">نص رسالة الترحيب:</label>
-                <textarea name="welcomeMessage" rows="3" style="width:100%; padding:12px; background:#1e1f22; color:white; border:1px solid #383a40; border-radius:6px;">${settings.welcomeMessage}</textarea>
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
-            </form>
-        `;
-    } else if (section === 'commands') {
+    // توليد المحتوى حسب القسم المطلوب
+    if (section === 'commands') {
         mainContent = `
             <h2>⚡ إعدادات الأوامر (Bot Commands)</h2>
-            <p style="color: #b9bbbe;">تحكم في بادئة أوامر البوت واستعرض الأوامر المتاحة.</p>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="commands">
@@ -150,28 +147,67 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <input type="text" name="prefix" value="${settings.prefix}" style="padding: 10px; width: 200px; background: #1e1f22; color: white; border: 1px solid #383a40; border-radius: 6px;">
                 <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ البادئة 💾</button>
             </form>
-            <hr style="border: 0; border-top: 1px solid #383a40; margin: 30px 0;">
-            <h3>📋 قائمة الأوامر الفعالة في البوت:</h3>
-            <ul style="line-height: 2; color: #dbdee1; background: #2b2d31; padding: 20px; border-radius: 8px; border: 1px solid #383a40;">
-                <li><b>${settings.prefix}ping</b> - فحص سرعة استجابة البوت.</li>
-                <li><b>${settings.prefix}ban [User]</b> - حظر عضو من السيرفر.</li>
-                <li><b>${settings.prefix}kick [User]</b> - طرد عضو من السيرفر.</li>
-                <li><b>${settings.prefix}clear [Number]</b> - مسح الرسائل.</li>
-            </ul>
         `;
     } else if (section === 'stats') {
         mainContent = `
             <h2>📈 الإحصائيات (Statistiques)</h2>
-            <div style="display: flex; gap: 20px; margin-top: 20px;">
-                <div style="background: #2b2d31; padding: 20px; border-radius: 8px; flex: 1; border: 1px solid #383a40;">
-                    <h3>إجمالي الأعضاء</h3>
-                    <p style="font-size: 24px; color: #5865F2; font-weight: bold;">${guild.memberCount}</p>
-                </div>
-                <div style="background: #2b2d31; padding: 20px; border-radius: 8px; flex: 1; border: 1px solid #383a40;">
-                    <h3>حالة البوت</h3>
-                    <p style="font-size: 24px; color: #43b581; font-weight: bold;">متصل وشغال 🟢</p>
-                </div>
-            </div>
+            <p>إجمالي أعضاء السيرفر: <b>${guild.memberCount}</b></p>
+        `;
+    } else if (section === 'vocaux') {
+        mainContent = `
+            <h2>🎙️ الرومات الصوتية المؤقتة (Vocaux Temporaires)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="vocaux">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="vocauxEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.vocauxEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.vocauxEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
+    } else if (section === 'starboard') {
+        mainContent = `
+            <h2>⭐ لوحة النجوم (Starboard)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="starboard">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="starboardEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.starboardEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.starboardEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
+    } else if (section === 'anniversaires') {
+        mainContent = `
+            <h2>🎂 أعياد الميلاد (Anniversaires)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="anniversaires">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="anniversairesEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.anniversairesEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.anniversairesEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
+    } else if (section === 'minijeux') {
+        mainContent = `
+            <h2>🎮 الألعاب المصغرة (Mini-jeux)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="minijeux">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="minijeuxEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.minijeuxEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.minijeuxEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
         `;
     } else if (section === 'autoroles') {
         mainContent = `
@@ -184,6 +220,34 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <br><br><button type="submit" style="background: #43b581; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الرتبة 💾</button>
             </form>
         `;
+    } else if (section === 'rolesreaction') {
+        mainContent = `
+            <h2>🏷️ رتب التفاعل (Rôles Réaction)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="rolesreaction">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="rolesReactionEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.rolesReactionEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.rolesReactionEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
+    } else if (section === 'rolestemporaires') {
+        mainContent = `
+            <h2>⏰ الرتب المؤقتة (Rôles Temporaires)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="rolestemporaires">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="rolesTemporairesEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.rolesTemporairesEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.rolesTemporairesEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
     } else if (section === 'spam') {
         mainContent = `
             <h2>💬 منع السبام (Spam Protection)</h2>
@@ -191,13 +255,13 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="spam">
                 <label style="display:block; margin-top:15px; font-weight:bold;">حالة الحماية:</label>
-                <select name="spamEnabled" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px;">
-                    <option value="true" ${settings.spamEnabled ? 'selected' : ''}>مفعل (Enabled)</option>
-                    <option value="false" ${!settings.spamEnabled ? 'selected' : ''}>معطل (Disabled)</option>
+                <select name="spamEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border: 1px solid #383a40;">
+                    <option value="true" ${settings.spamEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.spamEnabled ? 'selected' : ''}>❌ معطل</option>
                 </select>
                 <label style="display:block; margin-top:15px; font-weight:bold;">الحد الأقصى للرسائل:</label>
-                <input type="number" name="spamLimit" value="${settings.spamLimit}" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
+                <input type="number" name="spamLimit" value="${settings.spamLimit}" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
             </form>
         `;
     } else if (section === 'badlinks') {
@@ -207,28 +271,58 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="badlinks">
                 <label style="display:block; margin-top:15px; font-weight:bold;">حالة الحماية:</label>
-                <select name="badLinksEnabled" style="padding:10px; width:200px; background:#1e1f22; color:white; border-radius:6px;">
-                    <option value="true" ${settings.badLinksEnabled ? 'selected' : ''}>مفعل (Enabled)</option>
-                    <option value="false" ${!settings.badLinksEnabled ? 'selected' : ''}>معطل (Disabled)</option>
+                <select name="badLinksEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.badLinksEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.badLinksEnabled ? 'selected' : ''}>❌ معطل</option>
                 </select>
                 <label style="display:block; margin-top:15px; font-weight:bold;">الدومينات الممنوعة:</label>
                 <input type="text" name="blacklistedDomains" value="${settings.blacklistedDomains}" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
-                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
             </form>
         `;
     } else if (section === 'honeypot') {
+        let channelsOptions = `<option value="ALL" ${settings.honeypotChannelId === 'ALL' ? 'selected' : ''}>🌐 كل رومات السيرفر (All Channels)</option>`;
+        
+        guild.channels.cache
+            .filter(c => c.type === 0)
+            .forEach(ch => {
+                let isSelected = settings.honeypotChannelId === ch.id ? 'selected' : '';
+                channelsOptions += `<option value="${ch.id}" ${isSelected}># ${ch.name}</option>`;
+            });
+
         mainContent = `
             <h2>🍯 قنوات الفخ (Honeypot)</h2>
             <form action="/action/save" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 <input type="hidden" name="section" value="honeypot">
-                <label style="display:block; margin-top:15px; font-weight:bold;">معرف قناة الفخ (Channel ID):</label>
-                <input type="text" name="honeypotChannelId" value="${settings.honeypotChannelId}" style="width:100%; padding:10px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                <label style="display:block; margin-top:15px; font-weight:bold;">حالة الحماية:</label>
+                <select name="honeypotEnabled" style="padding:10px; width:100%; background:#1e1f22; color:white; border-radius:6px; border: 1px solid #383a40;">
+                    <option value="true" ${settings.honeypotEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.honeypotEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <label style="display:block; margin-top:15px; font-weight:bold;">اختر الروم (أو كل الرومات):</label>
+                <select name="honeypotChannelId" style="padding:10px; width:100%; background:#1e1f22; color:white; border-radius:6px; border: 1px solid #383a40;">
+                    ${channelsOptions}
+                </select>
                 <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ الإعدادات 💾</button>
             </form>
         `;
+    } else if (section === 'logs') {
+        mainContent = `
+            <h2>📋 سجلات البوت (Logs)</h2>
+            <form action="/action/save" method="POST">
+                <input type="hidden" name="guildId" value="${guild.id}">
+                <input type="hidden" name="section" value="logs">
+                <label style="display:block; margin-top:15px; font-weight:bold;">الحالة:</label>
+                <select name="logsEnabled" style="padding:10px; width:220px; background:#1e1f22; color:white; border-radius:6px; border:1px solid #383a40;">
+                    <option value="true" ${settings.logsEnabled ? 'selected' : ''}>✅ مفعل</option>
+                    <option value="false" ${!settings.logsEnabled ? 'selected' : ''}>❌ معطل</option>
+                </select>
+                <br><br><button type="submit" style="background: #5865F2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold;">حفظ 💾</button>
+            </form>
+        `;
     } else {
-        mainContent = `<h2>⚙️ القسم: ${section}</h2><p style="color: #b9bbbe;">هذا القسم متاح وجاهز للتفعيل!</p>`;
+        mainContent = `<h2>⚙️ القسم غير موجود</h2>`;
     }
 
     res.send(`
@@ -238,8 +332,8 @@ app.get('/control/:guildId/:section', (req, res) => {
             body { background-color: #313338; color: white; font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
             .content { flex: 1; padding: 40px; overflow-y: auto; background: #313338; }
             .sidebar { width: 280px; background: #2b2d31; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #1f2023; overflow-y: auto; height: 100vh; }
-            .sidebar h4 { color: #8e9297; font-size: 12px; margin: 15px 0 5px 0; text-transform: uppercase; }
-            .sidebar a { display: block; color: #b9bbbe; text-decoration: none; padding: 10px 12px; margin-bottom: 4px; background: #2b2d31; border-radius: 6px; font-weight: bold; font-size: 14px; }
+            .sidebar h4 { color: #8e9297; font-size: 11px; margin: 15px 0 5px 0; text-transform: uppercase; }
+            .sidebar a { display: block; color: #b9bbbe; text-decoration: none; padding: 9px 12px; margin-bottom: 3px; background: #2b2d31; border-radius: 6px; font-weight: bold; font-size: 13px; }
             .sidebar a:hover { background: #35373c; color: white; }
             .sidebar a.active { background: #5865F2; color: white; }
         </style></head>
@@ -251,27 +345,26 @@ app.get('/control/:guildId/:section', (req, res) => {
                 ${mainContent}
             </div>
             <div class="sidebar">
-                <h3 style="color:white; margin-top:0;">RKS Dashboard</h3>
-                <a href="/control/${guild.id}/welcome" class="${section === 'welcome' ? 'active' : ''}">🏆 Classement / الترتيب</a>
+                <h3 style="color:white; margin-top:0; font-size: 16px;">RKS Dashboard</h3>
                 <a href="/control/${guild.id}/commands" class="${section === 'commands' ? 'active' : ''}">⚡ Bot Commands / الأوامر</a>
                 <a href="/control/${guild.id}/stats" class="${section === 'stats' ? 'active' : ''}">📈 Statistiques</a>
-                <a href="/control/${guild.id}/vocals" class="${section === 'vocals' ? 'active' : ''}">🔊 Vocaux Temporaires</a>
+                <a href="/control/${guild.id}/vocaux" class="${section === 'vocaux' ? 'active' : ''}">🎙️ Vocaux Temporaires</a>
                 <a href="/control/${guild.id}/starboard" class="${section === 'starboard' ? 'active' : ''}">⭐ Starboard</a>
-                <a href="/control/${guild.id}/birthdays" class="${section === 'birthdays' ? 'active' : ''}">🎂 Anniversaires</a>
-                <a href="/control/${guild.id}/minigames" class="${section === 'minigames' ? 'active' : ''}">🎮 Mini-jeux</a>
-
-                <h4>Rôles</h4>
+                <a href="/control/${guild.id}/anniversaires" class="${section === 'anniversaires' ? 'active' : ''}">🎂 Anniversaires</a>
+                <a href="/control/${guild.id}/minijeux" class="${section === 'minijeux' ? 'active' : ''}">🎮 Mini-jeux</a>
+                
+                <h4>RÔLES</h4>
                 <a href="/control/${guild.id}/autoroles" class="${section === 'autoroles' ? 'active' : ''}">➕ Auto Rôles</a>
-                <a href="/control/${guild.id}/reactionroles" class="${section === 'reactionroles' ? 'active' : ''}">🏷️ Rôles Réaction</a>
-                <a href="/control/${guild.id}/temproles" class="${section === 'temproles' ? 'active' : ''}">⏰ Rôles Temporaires</a>
+                <a href="/control/${guild.id}/rolesreaction" class="${section === 'rolesreaction' ? 'active' : ''}">🏷️ Rôles Réaction</a>
+                <a href="/control/${guild.id}/rolestemporaires" class="${section === 'rolestemporaires' ? 'active' : ''}">⏰ Rôles Temporaires</a>
 
-                <h4>Modération & Protection</h4>
+                <h4>MODÉRATION & PROTECTION</h4>
                 <a href="/control/${guild.id}/spam" class="${section === 'spam' ? 'active' : ''}">💬 Spam Protection</a>
                 <a href="/control/${guild.id}/badlinks" class="${section === 'badlinks' ? 'active' : ''}">🔗 Bad Links</a>
                 <a href="/control/${guild.id}/honeypot" class="${section === 'honeypot' ? 'active' : ''}">🍯 Honeypot</a>
                 <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 Logs</a>
 
-                <div style="margin-top: 30px; border-top: 1px solid #383a40; padding-top: 15px;">
+                <div style="margin-top: 20px; border-top: 1px solid #383a40; padding-top: 15px;">
                     <a href="/dashboard" style="background:#5865F2; color:white; text-align:center;">← العودة للسيرفرات</a>
                 </div>
             </div>
@@ -279,61 +372,67 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// حفظ البيانات
+// --- حفظ الإعدادات بالكامل ---
 app.post('/action/save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
-    const { guildId, section, welcomeMessage, prefix, autoRoleName, spamEnabled, spamLimit, badLinksEnabled, blacklistedDomains, honeypotChannelId } = req.body;
-    if (!guildSettings[guildId]) guildSettings[guildId] = {};
+    const { 
+        guildId, section, prefix, autoRoleName, 
+        spamEnabled, spamLimit, badLinksEnabled, blacklistedDomains, 
+        honeypotEnabled, honeypotChannelId,
+        vocauxEnabled, starboardEnabled, anniversairesEnabled, 
+        minijeuxEnabled, rolesReactionEnabled, rolesTemporairesEnabled, logsEnabled 
+    } = req.body;
     
-    if (section === 'welcome') guildSettings[guildId].welcomeMessage = welcomeMessage;
-    if (section === 'commands') guildSettings[guildId].prefix = prefix || '!';
-    if (section === 'autoroles') guildSettings[guildId].autoRoleName = autoRoleName;
-    if (section === 'spam') {
-        guildSettings[guildId].spamEnabled = spamEnabled === 'true';
-        guildSettings[guildId].spamLimit = parseInt(spamLimit) || 5;
-    }
-    if (section === 'badlinks') {
-        guildSettings[guildId].badLinksEnabled = badLinksEnabled === 'true';
-        guildSettings[guildId].blacklistedDomains = blacklistedDomains;
-    }
-    if (section === 'honeypot') {
-        guildSettings[guildId].honeypotChannelId = honeypotChannelId;
-    }
+    if (!guildSettings[guildId]) guildSettings[guildId] = {};
+    const s = guildSettings[guildId];
+
+    if (section === 'commands') s.prefix = prefix || '!';
+    if (section === 'autoroles') s.autoRoleName = autoRoleName;
+    if (section === 'spam') { s.spamEnabled = spamEnabled === 'true'; s.spamLimit = parseInt(spamLimit) || 5; }
+    if (section === 'badlinks') { s.badLinksEnabled = badLinksEnabled === 'true'; s.blacklistedDomains = blacklistedDomains; }
+    if (section === 'honeypot') { s.honeypotEnabled = honeypotEnabled === 'true'; s.honeypotChannelId = honeypotChannelId; }
+    if (section === 'vocaux') s.vocauxEnabled = vocauxEnabled === 'true';
+    if (section === 'starboard') s.starboardEnabled = starboardEnabled === 'true';
+    if (section === 'anniversaires') s.anniversairesEnabled = anniversairesEnabled === 'true';
+    if (section === 'minijeux') s.minijeuxEnabled = minijeuxEnabled === 'true';
+    if (section === 'rolesreaction') s.rolesReactionEnabled = rolesReactionEnabled === 'true';
+    if (section === 'rolestemporaires') s.rolesTemporairesEnabled = rolesTemporairesEnabled === 'true';
+    if (section === 'logs') s.logsEnabled = logsEnabled === 'true';
 
     res.redirect(req.headers.referer || '/dashboard');
 });
 
-// --- نظام الأوامر والحماية داخل السيرفر ---
+// --- الأوامر والحماية ---
 client.on('messageCreate', async message => {
     if (!message.guild || message.author.bot) return;
     const settings = guildSettings[message.guild.id] || { prefix: '!' };
 
-    // تنفيذ الأوامر بالبادئة (Prefix)
     if (message.content.startsWith(settings.prefix)) {
         const args = message.content.slice(settings.prefix.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
 
         if (command === 'ping') {
-            await message.channel.send(`🏓 Pong! سرعة الاستجابة: ${client.ws.ping}ms`);
+            await message.channel.send(`🏓 Pong! ${client.ws.ping}ms`);
         } else if (command === 'clear') {
-            if (!message.member.permissions.has('ManageMessages')) return message.reply('❌ ليس لديك صلاحية لإدارة الرسائل.');
+            if (!message.member.permissions.has('ManageMessages')) return message.reply('❌ ليس لديك صلاحية.');
             const count = parseInt(args[0]) || 5;
             await message.channel.bulkDelete(count, true).catch(() => {});
-            const msg = await message.channel.send(`🗑️ تم مسح ${count} رسالة بنجاح.`);
-            setTimeout(() => msg.delete().catch(() => {}), 3000);
         }
     }
 
-    // 1. Honeypot
-    if (settings.honeypotChannelId && message.channel.id === settings.honeypotChannelId) {
-        try {
-            await message.delete();
-            await message.channel.send(`⚠️ ${message.author}, هذه قناة فخ ممنوع الكتابة فيها!`);
-        } catch (e) {}
-        return;
+    // فحص قنوات الفخ (كل الرومات أو قناة محددة)
+    if (settings.honeypotEnabled) {
+        const targetChannel = settings.honeypotChannelId || 'ALL';
+        if (targetChannel === 'ALL' || message.channel.id === targetChannel) {
+            try {
+                await message.delete();
+                await message.channel.send(`⚠️ ${message.author}, هذه القناة محمية!`);
+            } catch (e) {}
+            return;
+        }
     }
 
-    // 2. Bad Links
+    // فحص الروابط الضارة
     if (settings.badLinksEnabled && settings.blacklistedDomains) {
         const domains = settings.blacklistedDomains.split(',').map(d => d.trim().toLowerCase());
         const contentLower = message.content.toLowerCase();
@@ -346,7 +445,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 3. Spam Protection
+    // منع السبام
     if (settings.spamEnabled) {
         const userId = message.author.id;
         const now = Date.now();
@@ -356,7 +455,7 @@ client.on('messageCreate', async message => {
         timestamps = timestamps.filter(time => now - time < 5000);
         userMessageTracker.set(userId, timestamps);
 
-        if (timestamps.length > settings.spamLimit) {
+        if (timestamps.length > (settings.spamLimit || 5)) {
             try {
                 await message.delete();
                 await message.channel.send(`⚠️ ${message.author}, توقف عن السبام!`);
@@ -365,7 +464,7 @@ client.on('messageCreate', async message => {
     }
 });
 
-client.on('ready', () => console.log(`✅ البوت شغال: ${client.user.tag}`));
+client.on('ready', () => console.log(`✅ البوت شغال بكامل أقسامه: ${client.user.tag}`));
 client.login(process.env.DISCORD_TOKEN);
 
-app.listen(process.env.PORT || 3000, () => console.log('🚀 الداشبورد مع قسم الأوامر والحماية شغال 100%!'));
+app.listen(process.env.PORT || 3000, () => console.log('🚀 الداشبورد الشامل يعمل بنجاح!'));
