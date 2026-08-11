@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -30,14 +30,18 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-passport.use(new DiscordStrategy({
-    clientID: '1171579175635800175',         
-    clientSecret: 'I1JZsvXEZ_L4iQjAlIMurRy-c_ikOecN', 
-    callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
-    scope: ['identify', 'guilds']
-}, (accessToken, refreshToken, profile, done) => {
-    return done(null, profile);
-}));
+try {
+    passport.use(new DiscordStrategy({
+        clientID: '1171579175635800175',         
+        clientSecret: 'I1JZsvXEZ_L4iQjAlIMurRy-c_ikOecN', 
+        callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
+        scope: ['identify', 'guilds']
+    }, (accessToken, refreshToken, profile, done) => {
+        return done(null, profile);
+    }));
+} catch (err) {
+    console.error('خطأ في تهيئة استراتيجية ديسكورد:', err);
+}
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
@@ -320,5 +324,13 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-client.login(process.env.DISCORD_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('🚀 لوحة التحكم الشاملة تعمل بكامل طاقتها على Render!'));
+if (!process.env.DISCORD_TOKEN) {
+    console.error('❌ خطأ فادح: متغير البيئة DISCORD_TOKEN غير معرف في لوحة Render!');
+} else {
+    client.login(process.env.DISCORD_TOKEN).catch(err => {
+        console.error('❌ فشل تسجيل دخول البوت بالتوكن المدخل:', err);
+    });
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 لوحة التحكم الشاملة تعمل بنجاح تام على المنفذ ${PORT}!`));
