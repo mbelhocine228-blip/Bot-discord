@@ -18,8 +18,6 @@ const client = new Client({
 
 const guildSettings = new Map();
 const serverFeatures = new Map();
-
-// تخزين أوقات مهام الكلان لكل سيرفر
 const guildClubTimers = new Map();
 
 function getGuildFeatures(guildId) {
@@ -149,7 +147,7 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر ونظام التحديث الصامت بنجاح.');
     } catch (error) { console.error(error); }
 
-    // نظام النشر التلقائي (يفحص الأوقات المسجلة وينشرها في الروم المخصص تلقائياً)
+    // نظام النشر التلقائي للسيرفرات
     setInterval(() => {
         guildSettings.forEach((settings, guildId) => {
             if (settings && settings.newsChannelId) {
@@ -160,8 +158,6 @@ client.once('ready', async () => {
                         const channel = guild.channels.cache.get(settings.newsChannelId);
                         if (channel) {
                             const timerData = guildClubTimers.get(guildId);
-                            
-                            // يرسل التحديث فقط إذا كان هناك أوقات مسجلة مسبقاً عبر المسؤول
                             if (timerData) {
                                 const embed = new EmbedBuilder()
                                     .setTitle('🏁 التحديث التلقائي لمهام كلان RKS•ＰＯＷＥＲ')
@@ -180,13 +176,12 @@ client.once('ready', async () => {
                 }
             }
         });
-    }, 60 * 60 * 1000); // يفحص وينشر كل ساعة (أو يمكنك تعديل الوقت كما تحب)
+    }, 60 * 60 * 1000);
 });
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
-
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
@@ -581,13 +576,11 @@ client.on('interactionCreate', async interaction => {
             const enduranceTime = options.getString('endurance_time');
             const duelTime = options.getString('duel_time');
             
-            // تحديث الأوقات في النظام بصمت
             guildClubTimers.set(guild.id, {
                 endurance: enduranceTime,
                 duel: duelTime
             });
 
-            // الرد بـ ephemeral: true (يعني يظهر لك وحدك فقط وبشكل سري بدون إزعاج الشات)
             await interaction.reply({ 
                 content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\`\n*(سيعتمدها البوت في التحديثات التلقائية القادمة)*`, 
                 ephemeral: true 
