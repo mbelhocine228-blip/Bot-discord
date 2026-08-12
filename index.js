@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -17,7 +17,6 @@ const client = new Client({
 });
 
 const guildSettings = new Map();
-
 const serverFeatures = new Map();
 
 function getGuildFeatures(guildId) {
@@ -89,6 +88,9 @@ const botCommandsList = [
     { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
     { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
+    { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
+    { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
+    { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
     { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
@@ -122,6 +124,9 @@ const commands = [
     new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
     new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
+    new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
+    new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
+    new SlashCommandBuilder().setName('eventsched').setDescription('جدولة فعالية سباق جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
     new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -136,9 +141,10 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر (مع التذاكر والتقديم والفعاليات) بنجاح.');
     } catch (error) { console.error(error); }
 
+    // نظام الأخبار التلقائية
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
@@ -248,9 +254,7 @@ const rksThemeStyle = `
         text-align: center;
         letter-spacing: 1px;
     }
-    .nav-group {
-        margin-bottom: 5px;
-    }
+    .nav-group { margin-bottom: 5px; }
     .nav-item {
         color: #c4c9d4;
         text-decoration: none;
@@ -495,17 +499,35 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (استجابة 38ms)</strong></p>
             </div>
         `;
-    } else if (section === 'settings') {
+    } else if (section === 'tickets') {
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ إعدادات البوت واللغة</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تخصيص هوية ولغة عرض لوحة القيادة.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🎟️ نظام التذاكر والدعم الفني</h3>
+                <p style="color:#b9bbbe; font-size:13px;">يمكن للأعضاء فتح تذاكر خاصة عبر الأمر /ticketsetup أو الأزرار التفاعلية.</p>
             </div>
-            <div class="section-box">
-                <label style="color:#FFD700; font-weight:bold; font-size:13px;">لغة لوحة التحكم:</label>
-                <select><option>العربية (Arabic)</option><option>English</option></select>
-                <label style="color:#FFD700; font-weight:bold; margin-top:15px; display:block; font-size:13px;">لون الهوية (Theme):</label>
-                <select><option>ذهبي ROCKS (Gold)</option><option>أزرق ملكي (Royal Blue)</option></select>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>📌 أسلوب العمل: الضغط على زر فتح تذاكر ينشئ روم خاص ومؤمن بين العضو والإدارة.</p>
+                <p>🚀 جرب الآن كتابة <code style="color:#FFD700;">/ticketsetup</code> داخل السيرفر لنشر لوحة التذاكر.</p>
+            </div>
+        `;
+    } else if (section === 'apply') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📋 التقديم على كلان RKS•ＰＯＷＥＲ</h3>
+                <p style="color:#b9bbbe; font-size:13px;">نظام استقطاب اللاعبين والاحتراف في الألعاب.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>⭐ استخدم الأمر <code style="color:#FFD700;">/applysetup</code> لإرسال رسالة التقديم الرسمية في الشات.</p>
+            </div>
+        `;
+    } else if (section === 'events') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📅 جدول السباقات والفعاليات</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تنظيم بطولات سباق السيارات والمواعيد بين الأعضاء.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>🏆 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة وإعلانها للأعضاء.</p>
             </div>
         `;
     } else {
@@ -533,73 +555,19 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="sidebar">
                 <h3>مركز قيادة ROCKS</h3>
                 
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}">
-                        <span>📊 نظرة عامة</span>
-                    </a>
-                </div>
+                <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
+                
+                <!-- الأقسام الجديدة المدمجة -->
+                <div class="nav-group"><a href="/control/${guild.id}/tickets" class="nav-item ${section === 'tickets' ? 'active' : ''}"><span>🎟️ نظام التذاكر</span><span class="badge-new">مدمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/apply" class="nav-item ${section === 'apply' ? 'active' : ''}"><span>📋 التقديم للكلان</span><span class="badge-new">مدمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/events" class="nav-item ${section === 'events' ? 'active' : ''}"><span>📅 الفعاليات والسباقات</span><span class="badge-new">مدمج</span></a></div>
 
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}">
-                        <span>⚡ مكتبة الأوامر</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}">
-                        <span>🏎️ أخبار Racing</span>
-                        <span class="badge-new">جديد</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/discovery" class="nav-item ${section === 'discovery' ? 'active' : ''}">
-                        <span>🔍 اكتشاف الخادم</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}">
-                        <span>🛡️ الاعتدال والحماية</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}">
-                        <span>👥 الأدوار والصلاحيات</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/custom" class="nav-item ${section === 'custom' ? 'active' : ''}">
-                        <span>⚙️ الأوامر المخصصة</span>
-                    </a>
-                </div>
-
-                <div class="nav-group">
-                    <a href="/control/${guild.id}/notifications" class="nav-item ${section === 'notifications' ? 'active' : ''}">
-                        <span>🔔 إشعارات</span>
-                    </a>
-                </div>
-
-                <!-- قسم الجدوى والقوائم المنسدلة على شكل كارل بوت -->
-                <div class="nav-group">
-                    <div class="nav-item" style="color: #FFD700; font-weight: bold;">
-                        <span>📋 جدوى وأدوات</span>
-                    </div>
-                    <div class="nav-sub">
-                        <a href="/control/${guild.id}/greetings" class="${section === 'greetings' ? 'active' : ''}">📥 تحيات</a>
-                        <a href="/control/${guild.id}/dominance" class="${section === 'dominance' ? 'active' : ''}">⭐ ميمنة</a>
-                        <a href="/control/${guild.id}/embed" class="${section === 'embed' ? 'active' : ''}">🖼️ تضمين</a>
-                        <a href="/control/${guild.id}/suggestions" class="${section === 'suggestions' ? 'active' : ''}">💡 اقتراحات</a>
-                    </div>
-                </div>
-
-                <div class="nav-group" style="margin-top: 10px;">
-                    <a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}">
-                        <span>🛠️ الإعدادات والهوية</span>
-                    </a>
-                </div>
+                <div class="nav-group"><a href="/control/${guild.id}/discovery" class="nav-item ${section === 'discovery' ? 'active' : ''}"><span>🔍 اكتشاف الخادم</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}"><span>🛡️ الاعتدال والحماية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}"><span>👥 الأدوار والصلاحيات</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🛠️ الإعدادات والهوية</span></a></div>
 
                 <div style="margin-top: auto; padding-top: 15px;">
                     <a href="/dashboard" class="nav-item" style="background: rgba(255,215,0,0.06); color: #FFD700; justify-content: center; font-weight:bold; border: 1px solid rgba(255,215,0,0.2);">
@@ -625,6 +593,47 @@ app.get('/control/:guildId/:section', (req, res) => {
 });
 
 client.on('interactionCreate', async interaction => {
+    // معالجة الأزرار التفاعلية للتذاكر وإغلاقها
+    if (interaction.isButton()) {
+        if (interaction.customId === 'create_ticket') {
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const channelName = `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: channelName,
+                    type: ChannelType.GuildText,
+                    permissionOverwrites: [
+                        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
+                    ]
+                });
+
+                const closeRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 إغلاق التذكرة').setStyle(ButtonStyle.Danger)
+                );
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🎟️ تذكرة دعم جديدة - RKS•ＰＯＷＥＲ')
+                    .setDescription(`أهلاً بك يا ${interaction.user}، فريق الإدارة سيتواجد معك هنا قريباً. يرجى شرح مشكلتك أو طلبك بالتفصيل.`)
+                    .setColor('#FFD700')
+                    .setTimestamp();
+
+                await ticketChannel.send({ embeds: [embed], components: [closeRow] });
+                await interaction.editReply({ content: `✅ تم إنشاء تذكرتك بنجاح: ${ticketChannel}` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء التذكرة.' });
+            }
+        } 
+        else if (interaction.customId === 'close_ticket') {
+            await interaction.reply({ content: '🔒 سيتم إغلاق هذه التذكرة وحذفها خلال 5 ثواني...' });
+            setTimeout(() => {
+                interaction.channel.delete().catch(() => {});
+            }, 5000);
+        }
+        return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
     const features = getGuildFeatures(guild.id);
@@ -743,6 +752,43 @@ client.on('interactionCreate', async interaction => {
             guildSettings.set(guild.id, settings);
             
             await interaction.reply({ content: `✅ تم تعيين روم الأخبار بنجاح: ${channel} | سيتم إرسال آخر أخبار رايسنغ ماستر هنا تلقائياً كل 20 دقيقة.`, ephemeral: true });
+        }
+        // أوامر الميزات الجديدة المدمجة
+        else if (commandName === 'ticketsetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('create_ticket').setLabel('🎫 افتح تذكرة جديدة').setStyle(ButtonStyle.Success)
+            );
+            const embed = new EmbedBuilder()
+                .setTitle('🎟️ نظام التذاكر والدعم - RKS•ＰＯＷＥＲ')
+                .setDescription('إذا كان لديك استفسار، مشكلة، أو ترغب بالتواصل مع الإدارة، اضغط على الزر أدناه لفتح تذكرة خاصة.')
+                .setColor('#FFD700');
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ تم نشر لوحة التذاكر بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'applysetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const embed = new EmbedBuilder()
+                .setTitle('📋 التقديم على كلان RKS•ＰＯＷＥＲ')
+                .setDescription('هل تمتلك مهارات قوية في الألعاب وترغب بالانضمام إلينا؟ توجه إلى الإدارة أو افتح تذكرة تقديم!')
+                .setColor('#FFD700');
+            await interaction.channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال رسالة التقديم.', ephemeral: true });
+        }
+        else if (commandName === 'eventsched') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const title = options.getString('title');
+            const time = options.getString('time');
+            const embed = new EmbedBuilder()
+                .setTitle('📅 فعالية / سباق جديد في الكلان')
+                .addFields(
+                    { name: '🏆 الفعالية:', value: title },
+                    { name: '⏰ الموعد:', value: time }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.channel.send({ content: '@everyone', embeds: [embed] });
+            await interaction.reply({ content: '✅ تم جدولة وإعلان الفعالية بنجاح.', ephemeral: true });
         }
         else if (commandName === 'roll') {
             const num = Math.floor(Math.random() * 100) + 1;
