@@ -90,6 +90,7 @@ const botCommandsList = [
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
     { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
     { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
+    { name: 'clubmissions', desc: 'إعلان مهام كلان Racing Master الحالية (Endurance & Duel)' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
@@ -126,6 +127,7 @@ const commands = [
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
     new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
+    new SlashCommandBuilder().setName('clubmissions').setDescription('إعلان مهام وفعاليات الكلان الحالية (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت انتهاء Endurance (مثلاً: 2d 18h)').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت انتهاء Duel (مثلاً: 6d 23h)').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة فعالية سباق جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -141,16 +143,16 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر (مع التذاكر والتقديم والفعاليات) بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر (مع مهام كلان Racing Master) بنجاح.');
     } catch (error) { console.error(error); }
 
-    // نظام الأخبار التلقائية
+    // نظام الأخبار التلقائية ومهام الكلان كل 20 دقيقة
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
             "🔥 **بطولة كلان RKS•ＰＯＷＥＲ:** استعدوا يا أبطال، التحدي القادم سيكون على سيارات الفئة S الأسبوع الحالي!",
             "⚙️ **صيانة وإضافات توربو:** الشركة المطورة أعلنت عن سيارات جديدة كلياً ستنضم للعبة قريباً، كونوا على جاهزية!",
-            "🏆 **نصيحة للمحترفين:** ضبط إعدادات العجلات والإطارات سيمنحك أفضلية كبرى في المنعطفات الحادة."
+            "🏆 **تذكير مهام الكلان (Club Missions):** لا تنسوا إنجاز مهمات CLUB ENDURANCE و CLUB DUEL لرفع اسم RKS في الصدارة!"
         ];
         const randomNews = newsItems[Math.floor(Math.random() * newsItems.length)];
 
@@ -163,7 +165,7 @@ client.once('ready', async () => {
                         const channel = guild.channels.cache.get(settings.newsChannelId);
                         if (channel) {
                             const embed = new EmbedBuilder()
-                                .setTitle('🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)')
+                                .setTitle('🏎️ تحديثات وأخبار كلان RKS•ＰＯＷＥＲ (تلقائي)')
                                 .setDescription(randomNews)
                                 .setColor('#FFD700')
                                 .setTimestamp();
@@ -180,28 +182,10 @@ client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
 
-    if (features.linkspam && (message.content.includes('http://') || message.content.includes('https://') || message.content.includes('discord.gg'))) {
-        // حماية الروابط
-    }
-
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
         return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
-    }
-
-    if (features.deletefiles && message.attachments.size > 0) {
-        const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webm', '.mp4', '.gif', '.pdf', '.txt'];
-        let hasInvalidFile = false;
-        message.attachments.forEach(att => {
-            if (!allowedExtensions.some(ext => att.name.toLowerCase().endsWith(ext))) {
-                hasInvalidFile = true;
-            }
-        });
-        if (hasInvalidFile) {
-            await message.delete().catch(() => {});
-            return message.channel.send(`🚫 ${message.author}, هذا النوع من الملفات غير مسموح به هنا!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
-        }
     }
 });
 
@@ -273,31 +257,6 @@ const rksThemeStyle = `
     }
     .nav-item:hover, .nav-item.active {
         background: rgba(255, 215, 0, 0.12);
-        color: #FFD700;
-    }
-    .nav-sub {
-        padding-right: 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin-top: 4px;
-        margin-bottom: 6px;
-        border-right: 2px solid rgba(255, 215, 0, 0.2);
-        margin-right: 14px;
-    }
-    .nav-sub a {
-        color: #99aab5;
-        text-decoration: none;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        transition: 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .nav-sub a:hover, .nav-sub a.active {
-        background: rgba(255, 215, 0, 0.08);
         color: #FFD700;
     }
     .badge-new {
@@ -463,7 +422,6 @@ app.get('/control/:guildId/:section', (req, res) => {
                 </div>
             `;
         });
-
         sectionContent = `
             <div style="margin-bottom:20px;">
                 <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">مكتبة الأوامر الشاملة (${botCommandsList.length} أمر)</h3>
@@ -475,13 +433,13 @@ app.get('/control/:guildId/:section', (req, res) => {
         const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ روم الأخبار والتفعيل بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وكلان RKS•ＰＯＷＥＲ كل 20 دقيقة.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News & Club Missions</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر ومهام الكلان (Endurance & Duel) كل 20 دقيقة.</p>
             </div>
             ${savedAlert}
             <div class="section-box">
                 <form action="/control/${guild.id}/racing/save" method="POST">
-                    <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار التلقائي:</label>
+                    <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار والمهام التلقائي:</label>
                     <select name="newsChannelId">${channelsList}<option value="">-- إيقاف التفعيل --</option></select>
                     <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ التغييرات 🚀</button>
                 </form>
@@ -499,25 +457,24 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (استجابة 38ms)</strong></p>
             </div>
         `;
+    } else if (section === 'missions') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏁 مهام الكلان (Club Missions & Endurance)</h3>
+                <p style="color:#b9bbbe; font-size:13px;">إدارة وإعلان مهام لعبة Racing Master (مثل تحديات Endurance و Duel).</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>⭐ استخدم الأمر <code style="color:#FFD700;">/clubmissions</code> داخل ديسكورد لنشر جدول المهام الحالية وأوقات انتهائها لجميع الأعضاء.</p>
+            </div>
+        `;
     } else if (section === 'tickets') {
         sectionContent = `
             <div style="margin-bottom:20px;">
                 <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🎟️ نظام التذاكر والدعم الفني</h3>
-                <p style="color:#b9bbbe; font-size:13px;">يمكن للأعضاء فتح تذاكر خاصة عبر الأمر /ticketsetup أو الأزرار التفاعلية.</p>
+                <p style="color:#b9bbbe; font-size:13px;">يمكن للأعضاء فتح تذاكر خاصة عبر الأمر /ticketsetup.</p>
             </div>
             <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
-                <p>📌 أسلوب العمل: الضغط على زر فتح تذاكر ينشئ روم خاص ومؤمن بين العضو والإدارة.</p>
                 <p>🚀 جرب الآن كتابة <code style="color:#FFD700;">/ticketsetup</code> داخل السيرفر لنشر لوحة التذاكر.</p>
-            </div>
-        `;
-    } else if (section === 'apply') {
-        sectionContent = `
-            <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📋 التقديم على كلان RKS•ＰＯＷＥＲ</h3>
-                <p style="color:#b9bbbe; font-size:13px;">نظام استقطاب اللاعبين والاحتراف في الألعاب.</p>
-            </div>
-            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
-                <p>⭐ استخدم الأمر <code style="color:#FFD700;">/applysetup</code> لإرسال رسالة التقديم الرسمية في الشات.</p>
             </div>
         `;
     } else if (section === 'events') {
@@ -558,13 +515,10 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
-                
-                <!-- الأقسام الجديدة المدمجة -->
+                <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 مهام الكلان</span><span class="badge-new">كلان</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/tickets" class="nav-item ${section === 'tickets' ? 'active' : ''}"><span>🎟️ نظام التذاكر</span><span class="badge-new">مدمج</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/apply" class="nav-item ${section === 'apply' ? 'active' : ''}"><span>📋 التقديم للكلان</span><span class="badge-new">مدمج</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/events" class="nav-item ${section === 'events' ? 'active' : ''}"><span>📅 الفعاليات والسباقات</span><span class="badge-new">مدمج</span></a></div>
 
-                <div class="nav-group"><a href="/control/${guild.id}/discovery" class="nav-item ${section === 'discovery' ? 'active' : ''}"><span>🔍 اكتشاف الخادم</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}"><span>🛡️ الاعتدال والحماية</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}"><span>👥 الأدوار والصلاحيات</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🛠️ الإعدادات والهوية</span></a></div>
@@ -593,7 +547,6 @@ app.get('/control/:guildId/:section', (req, res) => {
 });
 
 client.on('interactionCreate', async interaction => {
-    // معالجة الأزرار التفاعلية للتذاكر وإغلاقها
     if (interaction.isButton()) {
         if (interaction.customId === 'create_ticket') {
             await interaction.deferReply({ ephemeral: true });
@@ -671,16 +624,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.bulkDelete(count, true).catch(() => {});
             await interaction.reply({ content: `🧹 تم مسح ${count} رسالة بنجاح.`, ephemeral: true });
         }
-        else if (commandName === 'lock') {
-            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
-            await interaction.channel.permissionOverwrites.edit(guild.id, { SendMessages: false });
-            await interaction.reply({ content: '🔒 تم قفل الروم بنجاح.' });
-        }
-        else if (commandName === 'unlock') {
-            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
-            await interaction.channel.permissionOverwrites.edit(guild.id, { SendMessages: true });
-            await interaction.reply({ content: '🔓 تم فتح الروم بنجاح.' });
-        }
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 Pong! سرعة استجابة ROCKS: ${client.ws.ping}ms` });
         }
@@ -753,7 +696,24 @@ client.on('interactionCreate', async interaction => {
             
             await interaction.reply({ content: `✅ تم تعيين روم الأخبار بنجاح: ${channel} | سيتم إرسال آخر أخبار رايسنغ ماستر هنا تلقائياً كل 20 دقيقة.`, ephemeral: true });
         }
-        // أوامر الميزات الجديدة المدمجة
+        else if (commandName === 'clubmissions') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const enduranceTime = options.getString('endurance_time');
+            const duelTime = options.getString('duel_time');
+            
+            const embed = new EmbedBuilder()
+                .setTitle('🏁 مهام وفعاليات كلان RKS•ＰＯＷＥＲ الحالية')
+                .setDescription('يا أبطال الكلان، يرجى إنجاز المهام المطلوبة ورفع النقاط قبل انتهاء الوقت المخصص:')
+                .addFields(
+                    { name: '🏎️ CLUB ENDURANCE (التحمل)', value: `⏳ الوقت المتبقي: **${enduranceTime}**`, inline: false },
+                    { name: '⚔️ CLUB DUEL (المبارزة/الحروب)', value: `⏳ الوقت المتبقي: **${duelTime}**`, inline: false }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            
+            await interaction.channel.send({ content: '@everyone 🚀 تنبيه مهام الكلان الجديدة!', embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إعلان مهام الكلان بنجاح للأعضاء.', ephemeral: true });
+        }
         else if (commandName === 'ticketsetup') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
             const row = new ActionRowBuilder().addComponents(
@@ -835,5 +795,5 @@ client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 مركز قيادة ROCKS وأخبار Racing Master التلقائية تعمل على المنفذ ${PORT}`);
+    console.log(`🚀 مركز قيادة ROCKS وأخبار Racing Master تعمل على المنفذ ${PORT}`);
 });
