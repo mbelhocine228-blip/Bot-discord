@@ -23,8 +23,12 @@ const guildClubTimers = new Map();
 function getGuildFeatures(guildId) {
     if (!serverFeatures.has(guildId)) {
         serverFeatures.set(guildId, {
-            linkspam: true,
+            attachmentspam: true,
+            automod: true,
+            capslimit: true,
+            capspunish: true,
             censor: true,
+            linkspam: true,
             deletefiles: true,
             mentionsspam: true,
             gaming_commands: true,
@@ -140,7 +144,7 @@ const commands = [
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
     new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
-    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance (مثلاً: Results Revealed)').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel (مثلاً: 2d 2h 54m)').setRequired(true)),
+    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة سباق أو فعالية جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -156,7 +160,7 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام التحديث الصامت بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
     } catch (error) { console.error(error); }
 
     setInterval(() => {
@@ -190,13 +194,64 @@ client.once('ready', async () => {
     }, 60 * 60 * 1000);
 });
 
+// نظام الحماية والسبام المطور (Anti-Spam & Automod Filters)
+const userMessageMap = new Map();
+
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
+
+    // 1. نظام منع سبام الصور والملفات (attachmentspam)
+    if (features.attachmentspam && message.attachments.size > 0) {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+            await message.delete().catch(() => {});
+            return message.channel.send(`⚠️ ${message.author}, ممنوع إرسال الصور والملفات بسرعة (Attachment Spam Protected)!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+        }
+    }
+
+    // 2. نظام فلترة الكلمات الممنوعة (censor)
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
         return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+    }
+
+    // 3. نظام منع الحروف الكبيرة المفرطة (capslimit / capspunish)
+    if (features.capslimit && message.content.length > 8) {
+        const letters = message.content.replace(/[^A-Za-z]/g, "");
+        if (letters.length > 5) {
+            const upperCaseLen = message.content.replace(/[^A-Z]/g, "").length;
+            const capsPercentage = (upperCaseLen / letters.length) * 100;
+            if (capsPercentage > 70) {
+                await message.delete().catch(() => {});
+                if (features.capspunish) {
+                    await message.member.timeout(60 * 1000, 'Caps lock abuse spam').catch(() => {});
+                }
+                return message.channel.send(`⚠️ ${message.author}, يرجى الإقلال من استخدام الحروف الكبيرة (CAPS LOCK)!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+            }
+        }
+    }
+
+    // 4. نظام منع تكرار الرسائل السريع (Anti-Spam Flood)
+    if (features.automod) {
+        if (!userMessageMap.has(message.author.id)) {
+            userMessageMap.set(message.author.id, { count: 1, lastMessageTime: Date.now() });
+        } else {
+            const userData = userMessageMap.get(message.author.id);
+            const difference = Date.now() - userData.lastMessageTime;
+            if (difference < 2500) {
+                userData.count++;
+                userData.lastMessageTime = Date.now();
+                if (userData.count >= 5) {
+                    await message.delete().catch(() => {});
+                    await message.member.timeout(30 * 1000, 'Spamming messages too fast').catch(() => {});
+                    return message.channel.send(`⚠️ ${message.author}, توقف عن إرسال الرسائل بسرعة مفرطة (Anti-Spam Triggered)!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+                }
+            } else {
+                userData.count = 1;
+                userData.lastMessageTime = Date.now();
+            }
+        }
     }
 });
 
@@ -205,7 +260,7 @@ app.post('/control/:guildId/commands/save', (req, res) => {
     const guildId = req.params.guildId;
     let features = getGuildFeatures(guildId);
     
-    // استقبال التحديثات من واجهة الأوامر و Automod
+    // حفظ خيارات السبام والحماية المحدثة بدقة من اللوحة
     features.attachmentspam = req.body.attachmentspam === 'on';
     features.automod = req.body.automod === 'on';
     features.capslimit = req.body.capslimit === 'on';
@@ -438,11 +493,11 @@ app.get('/control/:guildId/:section', (req, res) => {
 
     let sectionContent = '';
     if (section === 'commands') {
-        const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ إعدادات الأوامر و Automod بنجاح!</div>' : '';
+        const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ إعدادات الحماية والسبام بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ Commands & Automod Settings</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تحكم في إعدادات الأوامر وحماية السيرفر (Automod، الحماية من السبام، الحروف الكبيرة، والكلمات الممنوعة).</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ Anti-Spam & Automod Control</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحكم كامل في أنظمة الحماية، منع سبام الصور، الرتشم، الحروف الكبيرة، والكلمات الممنوعة.</p>
             </div>
             ${savedAlert}
             <div class="section-box">
@@ -450,23 +505,23 @@ app.get('/control/:guildId/:section', (req, res) => {
                     
                     <div class="command-card">
                         <div>
-                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">attachmentspam</span>
-                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Rate limits the sending of attachments</p>
+                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">attachmentspam (منع سبام الملفات والصور)</span>
+                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Rate limits the sending of attachments & images</p>
                         </div>
                         <label class="toggle-switch"><input type="checkbox" name="attachmentspam" ${features.attachmentspam ? 'checked' : ''}><span class="slider"></span></label>
                     </div>
 
                     <div class="command-card">
                         <div>
-                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">automod</span>
-                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Shows the server's current automod settings</p>
+                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">automod (الحماية التلقائية من السبام السريع)</span>
+                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Shows the server's current automod settings & speed limits</p>
                         </div>
                         <label class="toggle-switch"><input type="checkbox" name="automod" ${features.automod ? 'checked' : ''}><span class="slider"></span></label>
                     </div>
 
                     <div class="command-card">
                         <div>
-                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">capslimit</span>
+                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">capslimit (حد الحروف الكبيرة)</span>
                             <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Sets the percentage of a message that has to be upper case</p>
                         </div>
                         <label class="toggle-switch"><input type="checkbox" name="capslimit" ${features.capslimit ? 'checked' : ''}><span class="slider"></span></label>
@@ -474,21 +529,21 @@ app.get('/control/:guildId/:section', (req, res) => {
 
                     <div class="command-card">
                         <div>
-                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">capspunish</span>
-                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Sets the punishment for caps lock abuse</p>
+                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">capspunish (عقاب مخالفة الحروف الكبيرة)</span>
+                            <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Sets the punishment (Timeout) for caps lock abuse</p>
                         </div>
                         <label class="toggle-switch"><input type="checkbox" name="capspunish" ${features.capspunish ? 'checked' : ''}><span class="slider"></span></label>
                     </div>
 
                     <div class="command-card">
                         <div>
-                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">censor</span>
+                            <span style="font-weight:bold; color:#FFD700; font-size:15px;">censor (فلترة وحجب الكلمات الممنوعة)</span>
                             <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">Adds one or more words to be censored automatically</p>
                         </div>
                         <label class="toggle-switch"><input type="checkbox" name="censor" ${features.censor ? 'checked' : ''}><span class="slider"></span></label>
                     </div>
 
-                    <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ إعدادات الأوامر 🚀</button>
+                    <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ إعدادات الحماية والسبام 🚀</button>
                 </form>
             </div>
         `;
@@ -582,7 +637,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <h3>مركز قيادة ROCKS</h3>
                 
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Automod</span><span class="badge-new" style="background:#23a55a; color:white;">تحكم</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Spam</span><span class="badge-new" style="background:#23a55a; color:white;">حماية</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/libcommands" class="nav-item ${section === 'libcommands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 أوقات المهام</span><span class="badge-new">صامت</span></a></div>
