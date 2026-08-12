@@ -18,6 +18,25 @@ const client = new Client({
 
 const guildSettings = new Map();
 
+// ==========================================
+// نظام التحكم في تفعيل وتعطيل الميزات (Features Toggle System)
+// ==========================================
+const serverFeatures = new Map(); // لتخزين حالة تفعيل كل ميزة لكل سيرفر
+
+function getGuildFeatures(guildId) {
+    if (!serverFeatures.has(guildId)) {
+        serverFeatures.set(guildId, {
+            linkspam: true,
+            censor: true,
+            deletefiles: true,
+            mentionsspam: true,
+            gaming_commands: true,
+            notifications: true
+        });
+    }
+    return serverFeatures.get(guildId);
+}
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({ 
@@ -137,19 +156,55 @@ client.once('ready', async () => {
             if (settings && settings.newsChannelId) {
                 const guild = client.guilds.cache.get(guildId);
                 if (guild) {
-                    const channel = guild.channels.cache.get(settings.newsChannelId);
-                    if (channel) {
-                        const embed = new EmbedBuilder()
-                            .setTitle('🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)')
-                            .setDescription(randomNews)
-                            .setColor('#FFD700')
-                            .setTimestamp();
-                        channel.send({ embeds: [embed] }).catch(() => {});
+                    const features = getGuildFeatures(guildId);
+                    if (features.notifications) {
+                        const channel = guild.channels.cache.get(settings.newsChannelId);
+                        if (channel) {
+                            const embed = new EmbedBuilder()
+                                .setTitle('🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)')
+                                .setDescription(randomNews)
+                                .setColor('#FFD700')
+                                .setTimestamp();
+                            channel.send({ embeds: [embed] }).catch(() => {});
+                        }
                     }
                 }
             }
         });
     }, 20 * 60 * 1000);
+});
+
+// نظام حماية الرسائل وتطبيق الفلاتر وحذف الملفات والروابط
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild) return;
+    const features = getGuildFeatures(message.guild.id);
+
+    // 1. حماية الروابط (Linkspam)
+    if (features.linkspam && (message.content.includes('http://') || message.content.includes('https://') || message.content.includes('discord.gg'))) {
+        // يمكنك إضافة استثناءات هنا إذا أردت
+    }
+
+    // 2. فلترة الكلمات (Censor)
+    const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
+    if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`⚠️ ${message.author.mention}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+    }
+
+    // 3. حذف الملفات غير المسموحة (Deletefiles)
+    if (features.deletefiles && message.attachments.size > 0) {
+        const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webm', '.mp4', '.gif', '.pdf', '.txt'];
+        let hasInvalidFile = false;
+        message.attachments.forEach(att => {
+            if (!allowedExtensions.some(ext => att.name.toLowerCase().endsWith(ext))) {
+                hasInvalidFile = true;
+            }
+        });
+        if (hasInvalidFile) {
+            await message.delete().catch(() => {});
+            return message.channel.send(`🚫 ${message.author.mention}, هذا النوع من الملفات غير مسموح به هنا!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+        }
+    }
 });
 
 app.post('/control/:guildId/racing/save', (req, res) => {
@@ -500,6 +555,7 @@ app.get('/control/:guildId/:section', (req, res) => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
+    const features = getGuildFeatures(guild.id);
 
     try {
         if (commandName === 'ban') {
@@ -642,6 +698,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: `⏱️ مدة تشغيل ROCKS المستمرة: **${hours}** ساعة و **${minutes}** دقيقة.` });
         }
         else if (commandName === 'rps') {
+            if (!features.gaming_commands) return interaction.reply({ content: '❌ أوامر الألعاب معطلة حالياً في هذا السيرفر.', ephemeral: true });
             const choice = options.getString('choice');
             const choices = ['حجر', 'ورقة', 'مقص'];
             const botChoice = choices[Math.floor(Math.random() * choices.length)];
