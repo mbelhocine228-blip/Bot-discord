@@ -16,7 +16,6 @@ const client = new Client({
     ] 
 });
 
-// تخزين الإعدادات الشاملة لكل سيرفر
 const guildSettings = new Map();
 
 app.use(express.urlencoded({ extended: true }));
@@ -49,7 +48,40 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// --- جدول الأوامر الشامل ---
+// قائمة الـ 30 أمراً الأصلية مع شروحاتها لتظهر بالكامل في لوحة التحكم
+const botCommandsList = [
+    { name: 'ban', desc: 'حظر عضو من السيرفر' },
+    { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
+    { name: 'kick', desc: 'طرد عضو من السيرفر' },
+    { name: 'mute', desc: 'كتم عضو مؤقتاً (Timeout)' },
+    { name: 'unmute', desc: 'فك الكتم عن عضو' },
+    { name: 'clear', desc: 'مسح وحذف الرسائل بسرعة' },
+    { name: 'warn', desc: 'تحذير عضو مخالف' },
+    { name: 'lock', desc: 'قفل الروم الحالي لمنع التحدث' },
+    { name: 'unlock', desc: 'فتح الروم الحالي' },
+    { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
+    { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
+    { name: 'say', desc: 'تكرار الكلام عبر البوت' },
+    { name: 'ann', desc: 'إعلان رسمي مع منشن عام' },
+    { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
+    { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
+    { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
+    { name: 'serverinfo', desc: 'عرض معلومات السيرفر الكاملة' },
+    { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
+    { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
+    { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
+    { name: 'google', desc: 'البحث في جوجل مباشرة من السيرفر' },
+    { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
+    { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
+    { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
+    { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
+    { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
+    { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
+    { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
+    { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
+    { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
+];
+
 const commands = [
     new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
@@ -92,7 +124,6 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
     } catch (error) { console.error(error); }
 
-    // --- نظام الإرسال التلقائي لأخبار Racing Master كل 20 دقيقة ---
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
@@ -121,7 +152,6 @@ client.once('ready', async () => {
     }, 20 * 60 * 1000);
 });
 
-// استقبال تحديثات روم الأخبار من لوحة التحكم مباشرة
 app.post('/control/:guildId/racing/save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
@@ -134,8 +164,8 @@ app.post('/control/:guildId/racing/save', (req, res) => {
     res.redirect(`/control/${guildId}/racing?saved=true`);
 });
 
-// --- التصميم الاحترافي المخصص (مركز قيادة ROCKS - الستايل الذهبي الداكن الفخم) ---
 const rksThemeStyle = `
+    * { box-sizing: border-box; }
     body {
         background-color: #0b0d14;
         background-image: 
@@ -147,18 +177,22 @@ const rksThemeStyle = `
         margin: 0;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         display: flex;
+        flex-direction: row-reverse;
     }
     .sidebar {
         width: 270px;
-        background: rgba(13, 15, 22, 0.95);
+        min-width: 270px;
+        background: rgba(13, 15, 22, 0.98);
         backdrop-filter: blur(15px);
-        border-left: 1px solid rgba(255, 215, 0, 0.1);
+        border-right: 1px solid rgba(255, 215, 0, 0.1);
         display: flex;
         flex-direction: column;
         padding: 20px 15px;
-        box-shadow: 5px 0 30px rgba(0,0,0,0.7);
+        box-shadow: -5px 0 30px rgba(0,0,0,0.7);
         overflow-y: auto;
         max-height: 100vh;
+        position: sticky;
+        top: 0;
     }
     .sidebar h3 {
         color: #FFD700;
@@ -190,7 +224,7 @@ const rksThemeStyle = `
     .sidebar a:hover, .sidebar a.active {
         background: rgba(255, 215, 0, 0.12);
         color: #FFD700;
-        border-right: 3px solid #FFD700;
+        border-left: 3px solid #FFD700;
     }
     .badge-new {
         background: #FFD700;
@@ -202,7 +236,7 @@ const rksThemeStyle = `
     }
     .main-content {
         flex: 1;
-        padding: 35px;
+        padding: 25px;
         display: flex;
         justify-content: center;
         align-items: flex-start;
@@ -215,7 +249,7 @@ const rksThemeStyle = `
         border: 1px solid rgba(255, 215, 0, 0.12);
         box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
         border-radius: 20px;
-        padding: 35px;
+        padding: 25px;
         width: 100%;
         max-width: 800px;
     }
@@ -240,7 +274,7 @@ const rksThemeStyle = `
     }
     .section-box {
         background: rgba(255, 255, 255, 0.02);
-        padding: 22px;
+        padding: 20px;
         border-radius: 14px;
         margin-top: 20px;
         border: 1px solid rgba(255, 215, 0, 0.08);
@@ -277,6 +311,7 @@ const rksThemeStyle = `
         display: inline-block;
         width: 50px;
         height: 26px;
+        min-width: 50px;
     }
     .toggle-switch input { opacity: 0; width: 0; height: 0; }
     .slider {
@@ -293,11 +328,26 @@ const rksThemeStyle = `
     }
     input:checked + .slider { background-color: #FFD700; }
     input:checked + .slider:before { transform: translateX(24px); background-color: #0b0d14; }
+
+    @media (max-width: 768px) {
+        body { flex-direction: column; }
+        .sidebar {
+            width: 100%;
+            min-width: 100%;
+            max-height: auto;
+            position: relative;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            border-right: none;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+        }
+        .main-content { padding: 15px; }
+        .glass-card { padding: 18px; }
+    }
 `;
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>مركز قيادة ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card" style="text-align: center;"><h2 style="color: #FFD700; margin-bottom: 10px; font-size: 32px;">ROCKS COMMAND CENTER</h2><p style="color: #b9bbbe; margin-bottom: 30px; font-size: 15px;">مركز القيادة المطور لإدارة السيرفرات وأخبار الألعاب باحترافية تامة</p><a href="/login" class="btn-gold">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 25px;"><a href="${INVITE_URL}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 13px;">+ إضافة البوت لسيرفرك مباشرة</a></div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>مركز قيادة ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card" style="text-align: center;"><h2 style="color: #FFD700; margin-bottom: 10px; font-size: 26px;">ROCKS COMMAND CENTER</h2><p style="color: #b9bbbe; margin-bottom: 25px; font-size: 14px;">مركز القيادة المطور لإدارة السيرفرات وأخبار الألعاب باحترافية تامة</p><a href="/login" class="btn-gold">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 20px;"><a href="${INVITE_URL}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 13px;">+ إضافة البوت لسيرفرك مباشرة</a></div></div></body></html>`);
 });
 
 app.get('/dashboard', (req, res) => {
@@ -305,12 +355,11 @@ app.get('/dashboard', (req, res) => {
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
         let iconUrl = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
-        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(30,33,48,0.8);padding:20px;border-radius:16px;width:150px;border:1px solid rgba(255,215,0,0.15);transition:0.3s;"><img src="${iconUrl}" style="width:75px;height:75px;border-radius:50%;object-fit:cover;margin-bottom:12px;box-shadow: 0 4px 15px rgba(0,0,0,0.5);"><span style="font-size:13.5px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
+        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(30,33,48,0.8);padding:18px;border-radius:16px;width:140px;border:1px solid rgba(255,215,0,0.15);transition:0.3s;"><img src="${iconUrl}" style="width:65px;height:65px;border-radius:50%;object-fit:cover;margin-bottom:10px;box-shadow: 0 4px 15px rgba(0,0,0,0.5);"><span style="font-size:13px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
     });
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>الخوادم المتصلة - ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px; border-bottom: 1px solid rgba(255,215,0,0.1); padding-bottom: 20px;"><h3 style="margin:0; color:#FFD700; font-size: 20px;">👋 أهلاً بك، ${req.user.username}</h3><div><a href="/logout" style="background:rgba(237,66,69,0.2); color:#ed4245; padding:8px 16px; text-decoration:none; border-radius:8px; font-size:12.5px; font-weight:bold; border:1px solid rgba(237,66,69,0.4);">تسجيل خروج</a></div></div><p style="color:#b9bbbe; font-size:14px; margin-bottom:20px;">اختر السيرفر أدناه لإدارة إعداداته ومكتبة الأوامر الخاصة به:</p><div style="display:flex; gap:18px; flex-wrap:wrap;">${guildsHtml}</div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>الخوادم المتصلة - ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,215,0,0.1); padding-bottom: 15px;"><h3 style="margin:0; color:#FFD700; font-size: 18px;">👋 أهلاً بك، ${req.user.username}</h3><div><a href="/logout" style="background:rgba(237,66,69,0.2); color:#ed4245; padding:6px 12px; text-decoration:none; border-radius:8px; font-size:12px; font-weight:bold; border:1px solid rgba(237,66,69,0.4);">تسجيل خروج</a></div></div><p style="color:#b9bbbe; font-size:13.5px; margin-bottom:18px;">اختر السيرفر أدناه لإدارة إعداداته ومكتبة الأوامر الخاصة به:</p><div style="display:flex; gap:15px; flex-wrap:wrap; justify-content:center;">${guildsHtml}</div></div></body></html>`);
 });
 
-// --- مسارات التحكم مع القائمة الجانبية الفخمة وتصميم الـ Glassmorphism الذهبي ---
 app.get('/control/:guildId/:section', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guild = client.guilds.cache.get(req.params.guildId);
@@ -328,44 +377,37 @@ app.get('/control/:guildId/:section', (req, res) => {
 
     let sectionContent = '';
     if (section === 'commands') {
+        let commandsCardsHtml = '';
+        botCommandsList.forEach(cmd => {
+            commandsCardsHtml += `
+                <div class="command-card">
+                    <div>
+                        <span style="font-weight:bold; color:#FFD700; font-size:15px;">/${cmd.name}</span>
+                        <p style="color:#99aab5; font-size:12px; margin:4px 0 0 0;">${cmd.desc}</p>
+                    </div>
+                    <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                </div>
+            `;
+        });
+
         sectionContent = `
-            <div style="margin-bottom:25px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:22px;">مكتبة الأوامر</h3>
-                <p style="color:#b9bbbe; font-size:13.5px;">تحكم في قدرات ROCKS، واجعل كل أمر يعمل بالطريقة التي تناسب مجتمعك.</p>
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">مكتبة الأوامر الشاملة (${botCommandsList.length} أمر)</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحكم في كافة قدرات ROCKS، وفعل أو أوقف ما يناسب مجتمعك وسيرفرك.</p>
             </div>
-            <div class="command-card">
-                <div>
-                    <span style="font-weight:bold; color:#FFD700; font-size:16px;">/help</span>
-                    <p style="color:#99aab5; font-size:12.5px; margin:4px 0 0 0;">عرض قائمة الأوامر المتاحة ومعلومات استخدامها</p>
-                </div>
-                <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-            </div>
-            <div class="command-card">
-                <div>
-                    <span style="font-weight:bold; color:#FFD700; font-size:16px;">/stats</span>
-                    <p style="color:#99aab5; font-size:12.5px; margin:4px 0 0 0;">عرض إحصائيات السيرفر وأداء ROCKS</p>
-                </div>
-                <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-            </div>
-            <div class="command-card">
-                <div>
-                    <span style="font-weight:bold; color:#FFD700; font-size:16px;">/ban & /kick</span>
-                    <p style="color:#99aab5; font-size:12.5px; margin:4px 0 0 0;">أوامر الإشراف الصارمة وحظر الأعضاء</p>
-                </div>
-                <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-            </div>
+            ${commandsCardsHtml}
         `;
     } else if (section === 'racing') {
-        const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px;">✅ تم حفظ روم الأخبار والتفعيل بنجاح!</div>' : '';
+        const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ روم الأخبار والتفعيل بنجاح!</div>' : '';
         sectionContent = `
-            <div style="margin-bottom:25px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:22px;">🏎️ Racing Master News</h3>
-                <p style="color:#b9bbbe; font-size:13.5px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وكلان RKS•ＰＯＷＥＲ كل 20 دقيقة.</p>
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وكلان RKS•ＰＯＷＥＲ كل 20 دقيقة.</p>
             </div>
             ${savedAlert}
             <div class="section-box">
                 <form action="/control/${guild.id}/racing/save" method="POST">
-                    <label style="font-size:13.5px; color:#FFD700; font-weight:bold;">اختر روم الأخبار التلقائي:</label>
+                    <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار التلقائي:</label>
                     <select name="newsChannelId">${channelsList}<option value="">-- إيقاف التفعيل --</option></select>
                     <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ التغييرات 🚀</button>
                 </form>
@@ -373,11 +415,11 @@ app.get('/control/:guildId/:section', (req, res) => {
         `;
     } else if (section === 'stats') {
         sectionContent = `
-            <div style="margin-bottom:25px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:22px;">📊 إحصائيات النظام والسيرفر</h3>
-                <p style="color:#b9bbbe; font-size:13.5px;">مراقبة تفاصيل وأداء السيرفر لحظياً.</p>
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📊 إحصائيات النظام والسيرفر</h3>
+                <p style="color:#b9bbbe; font-size:13px;">مراقبة تفاصيل وأداء السيرفر لحظياً.</p>
             </div>
-            <div class="section-box">
+            <div class="section-box" style="font-size:14px; line-height: 1.8;">
                 <p>👥 عدد أعضاء السيرفر: <strong style="color:#FFD700;">${guild.memberCount}</strong></p>
                 <p>📁 إجمالي الرومات: <strong style="color:#FFD700;">${guild.channels.cache.size}</strong></p>
                 <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (استجابة 38ms)</strong></p>
@@ -385,24 +427,24 @@ app.get('/control/:guildId/:section', (req, res) => {
         `;
     } else if (section === 'settings') {
         sectionContent = `
-            <div style="margin-bottom:25px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:22px;">⚙️ إعدادات البوت واللغة</h3>
-                <p style="color:#b9bbbe; font-size:13.5px;">تخصيص هوية ولغة عرض لوحة القيادة.</p>
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ إعدادات البوت واللغة</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تخصيص هوية ولغة عرض لوحة القيادة.</p>
             </div>
             <div class="section-box">
-                <label style="color:#FFD700; font-weight:bold;">لغة لوحة التحكم:</label>
+                <label style="color:#FFD700; font-weight:bold; font-size:13px;">لغة لوحة التحكم:</label>
                 <select><option>العربية (Arabic)</option><option>English</option></select>
-                <label style="color:#FFD700; font-weight:bold; margin-top:15px; display:block;">لون الهوية (Theme):</label>
+                <label style="color:#FFD700; font-weight:bold; margin-top:15px; display:block; font-size:13px;">لون الهوية (Theme):</label>
                 <select><option>ذهبي ROCKS (Gold)</option><option>أزرق ملكي (Royal Blue)</option></select>
             </div>
         `;
     } else {
         sectionContent = `
-            <div style="margin-bottom:25px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:22px;">🛡️ الحماية والأقسام المتقدمة</h3>
-                <p style="color:#b9bbbe; font-size:13.5px;">أدوات حماية المجتمع وإدارة الرتب بذكاء.</p>
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🛡️ الحماية والأقسام المتقدمة</h3>
+                <p style="color:#b9bbbe; font-size:13px;">أدوات حماية المجتمع وإدارة الرتب بذكاء.</p>
             </div>
-            <div class="section-box">
+            <div class="section-box" style="font-size:13.5px;">
                 🟢 هذا القسم مفعل وجاهز بالكامل للعمل داخل خادمك.
             </div>
         `;
@@ -413,6 +455,7 @@ app.get('/control/:guildId/:section', (req, res) => {
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>مركز قيادة ROCKS - ${guild.name}</title>
             <style>${rksThemeStyle}</style>
         </head>
@@ -439,11 +482,11 @@ app.get('/control/:guildId/:section', (req, res) => {
             </div>
             <div class="main-content">
                 <div class="glass-card">
-                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; border-bottom: 1px solid rgba(255,215,0,0.1); padding-bottom: 20px;">
-                        <img src="${guildIcon}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid #FFD700;box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,215,0,0.1); padding-bottom: 15px;">
+                        <img src="${guildIcon}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid #FFD700;box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
                         <div>
-                            <h2 style="color:#FFD700; margin:0 0 5px 0; font-size:20px;">${guild.name}</h2>
-                            <span style="color: #23a55a; font-size: 12px; font-weight: bold;">● ROCKS متصل الآن (زمن الاستجابة: 38ms)</span>
+                            <h2 style="color:#FFD700; margin:0 0 4px 0; font-size:18px;">${guild.name}</h2>
+                            <span style="color: #23a55a; font-size: 11.5px; font-weight: bold;">● ROCKS متصل الآن (زمن الاستجابة: 38ms)</span>
                         </div>
                     </div>
                     ${sectionContent}
@@ -454,7 +497,6 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
-// --- تنفيذ الأوامر داخل ديسكورد ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
