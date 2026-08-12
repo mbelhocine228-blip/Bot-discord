@@ -811,6 +811,200 @@ client.on('interactionCreate', async interaction => {
             await channel.permissionOverwrites.edit(guild.id, { SendMessages: null });
             await interaction.reply({ content: '🔓 تم فتح الروم بنجاح.' });
         }
+        else if (commandName === 'say') {
+            const text = options.getString('text');
+            await channel.send(text);
+            await interaction.reply({ content: '✅ تم إرسال الرسالة بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'ascii') {
+            const text = options.getString('text');
+            await interaction.reply({ content: `\`\`\`\n${text.split('').join(' ')}\n\`\`\`` });
+        }
+        else if (commandName === '8ball') {
+            const question = options.getString('question');
+            const answers = ['نعم بالتأكيد 🟢', 'لا أؤكد ذلك 🔴', 'ربما، الله أعلم 🟡', 'استحالة ذلك ❌', 'بالتأكيد نعم ✅', 'اسأل مرة أخرى لاحقاً ⏱️'];
+            const ans = answers[Math.floor(Math.random() * answers.length)];
+            const embed = new EmbedBuilder().setTitle('🎱 كرة الحظ (8Ball)').addFields({ name: 'السؤال:', value: question }, { name: 'الإجابة:', value: ans }).setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'botinfo') {
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 معلومات بوت ROCKS Dashboard')
+                .setDescription('بوت احترافي مخصص لإدارة السيرفرات وأخبار لعبة Racing Master وكلان RKS POWER.')
+                .addFields(
+                    { name: '⚡ سرعة الاستجابة', value: `${client.ws.ping}ms`, inline: true },
+                    { name: '👥 السيرفرات', value: `${client.guilds.cache.size}`, inline: true },
+                    { name: '🛠️ الإصدار', value: 'v3.0 Pro', inline: true }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'serverinfo') {
+            const owner = await guild.fetchOwner();
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 معلومات سيرفر: ${guild.name}`)
+                .setThumbnail(guild.iconURL({ dynamic: true }))
+                .addFields(
+                    { name: '👑 المالك', value: `${owner.user.tag}`, inline: true },
+                    { name: '👥 الأعضاء', value: `${guild.memberCount}`, inline: true },
+                    { name: '📁 الرومات', value: `${guild.channels.cache.size}`, inline: true },
+                    { name: '🛡️ الرتب', value: `${guild.roles.cache.size}`, inline: true }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'userinfo') {
+            const targetUser = options.getUser('user') || interaction.user;
+            const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+            const embed = new EmbedBuilder()
+                .setTitle(`👤 معلومات العضو: ${targetUser.tag}`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                .addFields(
+                    { name: '🆔 الآيدي', value: `${targetUser.id}`, inline: true },
+                    { name: '📅 انضمام ديسكورد', value: `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>`, inline: true },
+                    { name: '📥 انضمام للسيرفر', value: targetMember ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>` : 'غير معروف', inline: true }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'avatar') {
+            const targetUser = options.getUser('user') || interaction.user;
+            const embed = new EmbedBuilder()
+                .setTitle(`🖼️ صورة بروفايل: ${targetUser.username}`)
+                .setImage(targetUser.displayAvatarURL({ size: 1024, dynamic: true }))
+                .setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'roll') {
+            const num = Math.floor(Math.random() * 100) + 1;
+            await interaction.reply({ content: `🎲 لقد رميت الزهر وظهر الرقم: **${num}** / 100` });
+        }
+        else if (commandName === 'coinflip') {
+            const result = Math.random() < 0.5 ? '🪙 طرة (Heads)' : '🪙 كتابة (Tails)';
+            await interaction.reply({ content: `نتيجة العملة: **${result}**` });
+        }
+        else if (commandName === 'poll') {
+            const question = options.getString('question');
+            const embed = new EmbedBuilder()
+                .setTitle('📊 تصويت جديد')
+                .setDescription(question)
+                .setColor('#FFD700')
+                .setFooter({ text: `صاحب التصويت: ${interaction.user.tag}` })
+                .setTimestamp();
+            const pollMsg = await channel.send({ embeds: [embed] });
+            await pollMsg.react('👍');
+            await pollMsg.react('👎');
+            await interaction.reply({ content: '✅ تم إنشاء التصويت بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'embed') {
+            const title = options.getString('title');
+            const description = options.getString('description');
+            const embed = new EmbedBuilder()
+                .setTitle(title)
+                .setDescription(description)
+                .setColor('#FFD700')
+                .setTimestamp();
+            await channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال الإمبد بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'google') {
+            const query = options.getString('query');
+            const encoded = encodeURIComponent(query);
+            await interaction.reply({ content: `🔍 نتائج البحث لـ **${query}**:\nhttps://www.google.com/search?q=${encoded}` });
+        }
+        else if (commandName === 'racingnews') {
+            const embed = new EmbedBuilder()
+                .setTitle('🏎️ آخر أخبار لعبة Racing Master الرسمية')
+                .setDescription('• **التحديث القادم:** أحدث سيارات الدفع الرباعي والسباقات الليلية الحصرية.\n• **فعاليات الكلان:** تسابق الآن وارفع لفل كلان RKS POWER.\n• تابع الموقع الرسمي واللعبة لمعرفة أحدث المواعيد.')
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'rockstats') {
+            const embed = new EmbedBuilder()
+                .setTitle('📊 إحصائيات كلان RKS•ＰＯＷＥＲ')
+                .addFields(
+                    { name: '🏆 ترتيب الكلان', value: 'Top 10 (Elite Clan)', inline: true },
+                    { name: '👥 عدد الأعضاء النشطين', value: '50 / 50', inline: true },
+                    { name: '⚡ مجموع نقاط الكلان', value: '1,450,200 XP', inline: false }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'ticketsetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('create_ticket').setLabel('🎫 فتح تذكرة جديدة').setStyle(ButtonStyle.Primary)
+            );
+            const embed = new EmbedBuilder()
+                .setTitle('🎟️ نظام الدعم الفني وتذاكر كلان RKS')
+                .setDescription('إذا كان لديك أي استفسار أو مشكلة، اضغط على الزر أدناه لفتح تذكرة خاصة مع الإدارة.')
+                .setColor('#FFD700');
+            await channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ تم إنشاء لوحة التذاكر بنجاح في هذا الروم!', ephemeral: true });
+        }
+        else if (commandName === 'applysetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const embed = new EmbedBuilder()
+                .setTitle('📝 نموذج التقديم للانضمام إلى كلان RKS POWER')
+                .setDescription('تبي تنضم لكلان RKS؟ شروطنا واضحة:\n1. التفاعل المستمر وحضور مهام الكلان (Endurance & Duel).\n2. احترام الأعضاء والإدارة.\n3. اللعب النظيف والاحترافي في Racing Master.\n\nتواصل مع الإدارة أو افتح تذكرة للتقديم!')
+                .setColor('#FFD700');
+            await channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال نموذج التقديم بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'eventsched') {
+            const title = options.getString('title');
+            const time = options.getString('time');
+            const embed = new EmbedBuilder()
+                .setTitle('📅 سباق / فعالية جديدة في كلان RKS')
+                .addFields(
+                    { name: '🏎️ الفعالية', value: title, inline: false },
+                    { name: '⏰ الوقت والتاريخ', value: time, inline: false }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await channel.send({ content: '@here @everyone', embeds: [embed] });
+            await interaction.reply({ content: '✅ تم جدولة الفعالية وإرسالها بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'rps') {
+            const choice = options.getString('choice').toLowerCase();
+            const choices = ['حجر', 'ورقة', 'مقص'];
+            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            let result = '';
+            if (choice === botChoice) {
+                result = '🤝 تعادل!';
+            } else if (
+                (choice === 'حجر' && botChoice === 'مقص') ||
+                (choice === 'ورقة' && botChoice === 'حجر') ||
+                (choice === 'مقص' && botChoice === 'ورقة')
+            ) {
+                result = '🎉 مبروك، لقد فزت!';
+            } else {
+                result = '😢 لقد خسرت، حاول مرة أخرى!';
+            }
+            await interaction.reply({ content: `🤖 اختيار البوت: **${botChoice}**\n👤 اختيارك: **${choice}**\n\n**${result}**` });
+        }
+        else if (commandName === 'hug' || commandName === 'slap') {
+            const targetUser = options.getUser('user');
+            if (commandName === 'hug') {
+                await interaction.reply({ content: `🤗 ${interaction.user} يرسل حضناً دافئاً وودياً إلى ${targetUser}! ❤️` });
+            } else {
+                await interaction.reply({ content: `👋 ${interaction.user} يعطي كفاً مزحياً لـ ${targetUser}! 💥 لووول` });
+            }
+        }
+        else if (commandName === 'uptime') {
+            const uptimeSecs = Math.floor(client.uptime / 1000);
+            const hours = Math.floor(uptimeSecs / 3600);
+            const minutes = Math.floor((uptimeSecs % 3600) / 60);
+            const seconds = uptimeSecs % 60;
+            await interaction.reply({ content: `⏱️ مدة تشغيل البوت المستمرة: **${hours} ساعة، ${minutes} دقيقة، ${seconds} ثانية**` });
+        }
         else if (commandName === 'announcement') {
             await interaction.deferReply({ ephemeral: true });
 
