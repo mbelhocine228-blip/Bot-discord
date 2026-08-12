@@ -89,7 +89,7 @@ const botCommandsList = [
     { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
     { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
     { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
-    { name: 'google', desc: 'البحث السريع وجلب الإجابة الملخصة مباشرة' },
+    { name: 'google', desc: 'البحث في جوجل وجلب الإجابة مباشرة دون إرسال روابط' },
     { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
     { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
@@ -138,7 +138,7 @@ const commands = [
     new SlashCommandBuilder().setName('userinfo').setDescription('عرض معلومات عضويتك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
     new SlashCommandBuilder().setName('roll').setDescription('رمي زهر عشوائي (رقم من 1 لـ 100)'),
     new SlashCommandBuilder().setName('coinflip').setDescription('لعبة طرة أو كتابة'),
-    new SlashCommandBuilder().setName('google').setDescription('البحث السريع وجلب الإجابة الملخصة مباشرة').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
+    new SlashCommandBuilder().setName('google').setDescription('البحث وجلب الإجابة مباشرة من محرك البحث').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
     new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
     new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
@@ -911,32 +911,34 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: '✅ تم إرسال الإمبد بنجاح!', ephemeral: true });
         }
         else if (commandName === 'google') {
-            const query = options.getString('query').trim().toLowerCase();
-            
-            // قاموس إجابات ذكية وملخصة فورية للأسئلة الشائعة
-            let summaryAnswer = "عذراً، لم أجد إجابة ملخصة مباشرة لهذا السؤال في قاعدة البيانات الحالية.";
-            
-            if (query.includes('استقلال الجزائر') || query.includes('متى استقلت الجزائر') || query.includes('استقلال الجزائر متى')) {
-                summaryAnswer = "🇩🇿 نالت الجزائر استقلالها رسمياً في **5 يوليو/تموز 1962** بعد ثورة تحريرية مباركة ضد الاستعمار الفرنسي دامت سبع سنوات ونصف.";
-            } else if (query.includes('مساحة الجزائر') || query.includes('مساحة الجزائر كم')) {
-                summaryAnswer = "🇩🇿 تبلغ مساحة الجزائر حوالي **2,381,741 كم²**، وهي أكبر دولة في أفريقيا والوطن العربي من حيث المساحة.";
-            } else if (query.includes('عاصمة الجزائر')) {
-                summaryAnswer = "🇩🇿 عاصمة الجزائر هي **مدينة الجزائر** (الجزائر العاصمة).";
-            } else {
-                // إجابة عامة افتراضية ذكية بناءً على نص البحث
-                summaryAnswer = `📖 **ملخص البحث عن:** "${options.getString('query')}"\n\nأبرز النتائج تشير إلى أن هذا الموضوع يتعلق بمعلومات تاريخية أو جغرافية عامة. يمكنك التحقق من التفاصيل الدقيقة عبر محرك البحث.`;
+            const query = options.getString('query');
+            await interaction.deferReply();
+
+            try {
+                const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+                const data = await response.json();
+
+                let answerText = data.AbstractText || data.RelatedTopics?.[0]?.Text || data.Answer;
+
+                if (!answerText) {
+                    answerText = `عذراً، لم أتمكن من العثور على ملخص مباشر لـ "${query}"، حاول كتابة السؤال بصيغة أخرى.`;
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`🔍 إجابة البحث: ${query}`)
+                    .setDescription(answerText)
+                    .setColor('#FFD700')
+                    .setTimestamp();
+
+                if (data.AbstractURL) {
+                    embed.addFields({ name: '🔗 للمزيد من التفاصيل:', value: data.AbstractURL });
+                }
+
+                await interaction.editReply({ embeds: [embed] });
+            } catch (error) {
+                console.error(error);
+                await interaction.editReply({ content: '❌ حدث خطأ أثناء جلب الإجابة من محرك البحث.' });
             }
-
-            const embed = new EmbedBuilder()
-                .setTitle('🔍 إجابة البحث السريع (Google AI Summary)')
-                .addFields(
-                    { name: '❓ السؤال:', value: options.getString('query'), inline: false },
-                    { name: '💡 الجواب الملخص:', value: summaryAnswer, inline: false }
-                )
-                .setColor('#FFD700')
-                .setTimestamp();
-
-            await interaction.reply({ embeds: [embed] });
         }
         else if (commandName === 'racingnews') {
             const embed = new EmbedBuilder()
