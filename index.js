@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
+Const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -89,7 +89,7 @@ const botCommandsList = [
     { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
     { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
     { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
-    { name: 'google', desc: 'البحث في جوجل مباشرة من السيرفر' },
+    { name: 'google', desc: 'البحث في جوجل وجلب الإجابة مباشرة دون إرسال روابط' },
     { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
     { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
@@ -138,7 +138,7 @@ const commands = [
     new SlashCommandBuilder().setName('userinfo').setDescription('عرض معلومات عضويتك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
     new SlashCommandBuilder().setName('roll').setDescription('رمي زهر عشوائي (رقم من 1 لـ 100)'),
     new SlashCommandBuilder().setName('coinflip').setDescription('لعبة طرة أو كتابة'),
-    new SlashCommandBuilder().setName('google').setDescription('البحث في جوجل مباشرة من السيرفر').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
+    new SlashCommandBuilder().setName('google').setDescription('البحث وجلب الإجابة مباشرة من محرك البحث').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
     new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
     new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
@@ -912,8 +912,29 @@ client.on('interactionCreate', async interaction => {
         }
         else if (commandName === 'google') {
             const query = options.getString('query');
-            const encoded = encodeURIComponent(query);
-            await interaction.reply({ content: `🔍 نتائج البحث لـ **${query}**:\nhttps://www.google.com/search?q=${encoded}` });
+            await interaction.deferReply();
+
+            try {
+                const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+                const data = await response.json();
+
+                let answerText = data.AbstractText || data.RelatedTopics?.[0]?.Text;
+
+                if (!answerText) {
+                    answerText = `عذراً، لم أتمكن من العثور على ملخص مباشر لـ "${query}"، حاول كتابة السؤال بصيغة أخرى.`;
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`🔍 إجابة البحث: ${query}`)
+                    .setDescription(answerText)
+                    .setColor('#FFD700')
+                    .setTimestamp();
+
+                await interaction.editReply({ embeds: [embed] });
+            } catch (error) {
+                console.error(error);
+                await interaction.editReply({ content: '❌ حدث خطأ أثناء جلب الإجابة من محرك البحث.' });
+            }
         }
         else if (commandName === 'racingnews') {
             const embed = new EmbedBuilder()
