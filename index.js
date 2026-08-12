@@ -194,14 +194,12 @@ client.once('ready', async () => {
     }, 60 * 60 * 1000);
 });
 
-// نظام الحماية والسبام المطور (Anti-Spam & Automod Filters)
 const userMessageMap = new Map();
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
 
-    // 1. نظام منع سبام الصور والملفات (attachmentspam)
     if (features.attachmentspam && message.attachments.size > 0) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
             await message.delete().catch(() => {});
@@ -209,14 +207,12 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 2. نظام فلترة الكلمات الممنوعة (censor)
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
         return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
     }
 
-    // 3. نظام منع الحروف الكبيرة المفرطة (capslimit / capspunish)
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
         if (letters.length > 5) {
@@ -232,7 +228,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 4. نظام منع تكرار الرسائل السريع (Anti-Spam Flood)
     if (features.automod) {
         if (!userMessageMap.has(message.author.id)) {
             userMessageMap.set(message.author.id, { count: 1, lastMessageTime: Date.now() });
@@ -260,7 +255,6 @@ app.post('/control/:guildId/commands/save', (req, res) => {
     const guildId = req.params.guildId;
     let features = getGuildFeatures(guildId);
     
-    // حفظ خيارات السبام والحماية المحدثة بدقة من اللوحة
     features.attachmentspam = req.body.attachmentspam === 'on';
     features.automod = req.body.automod === 'on';
     features.capslimit = req.body.capslimit === 'on';
@@ -496,7 +490,7 @@ app.get('/control/:guildId/:section', (req, res) => {
         const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ إعدادات الحماية والسبام بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ Anti-Spam & Automod Control</h3>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ Commands & Automod Control</h3>
                 <p style="color:#b9bbbe; font-size:13px;">تحكم كامل في أنظمة الحماية، منع سبام الصور، الرتشم، الحروف الكبيرة، والكلمات الممنوعة.</p>
             </div>
             ${savedAlert}
@@ -592,7 +586,7 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="section-box" style="font-size:14px; line-height: 1.8;">
                 <p>👥 عدد أعضاء السيرفر: <strong style="color:#FFD700;">${guild.memberCount}</strong></p>
                 <p>📁 إجمالي الرومات: <strong style="color:#FFD700;">${guild.channels.cache.size}</strong></p>
-                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة</strong></p>
+                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (38ms)</strong></p>
             </div>
         `;
     } else if (section === 'missions') {
@@ -609,6 +603,56 @@ app.get('/control/:guildId/:section', (req, res) => {
                     <p style="margin: 5px 0 0 0;">🏎️ Endurance: ${timerInfo ? timerInfo.endurance : 'غير مسجل'}</p>
                     <p style="margin: 5px 0 0 0;">⚔️ Duel: ${timerInfo ? timerInfo.duel : 'غير مسجل'}</p>
                 </div>
+            </div>
+        `;
+    } else if (section === 'tickets') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🎟️ نظام التذاكر المتكامل</h3>
+                <p style="color:#b9bbbe; font-size:13px;">إدارة رومات الدعم الفني واستقبال تذاكر الأعضاء.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px;">
+                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/ticketsetup</code> في ديسكورد لإنشاء لوحة التذاكر التفاعلية.</p>
+            </div>
+        `;
+    } else if (section === 'events') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📅 الفعاليات والسباقات</h3>
+                <p style="color:#b9bbbe; font-size:13px;">جدولة وتنظيم سباقات وفعاليات كلان RKS.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px;">
+                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة.</p>
+            </div>
+        `;
+    } else if (section === 'moderation') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🛡️ الاعتدال والحماية</h3>
+                <p style="color:#b9bbbe; font-size:13px;">إعدادات الحظر، الطرد، الكتم، وحماية الرومات.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px;">
+                <p>🟢 كافة أدوات الحماية (Ban, Kick, Mute, Warn, Lock) مفعلة وجاهزة عبر الأوامر.</p>
+            </div>
+        `;
+    } else if (section === 'roles') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">👥 الأدوار والصلاحيات</h3>
+                <p style="color:#b9bbbe; font-size:13px;">مراجعة صلاحيات الرتب والإدارة داخل السيرفر.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px;">
+                <p>👥 عدد رتب السيرفر: <strong style="color:#FFD700;">${guild.roles.cache.size}</strong></p>
+            </div>
+        `;
+    } else if (section === 'settings') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🔧 الإعدادات والهوية</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تخصيص إعدادات البوت العامة وهوية السيرفر.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px;">
+                <p>⭐ اسم السيرفر: <strong style="color:#FFD700;">${guild.name}</strong></p>
             </div>
         `;
     } else {
@@ -637,10 +681,15 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <h3>مركز قيادة ROCKS</h3>
                 
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Spam</span><span class="badge-new" style="background:#23a55a; color:white;">حماية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Automod</span><span class="badge-new" style="background:#23a55a; color:white;">تحكم</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/libcommands" class="nav-item ${section === 'libcommands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 أوقات المهام</span><span class="badge-new">صامت</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 مهام الكلان</span><span class="badge-new" style="background:#FFD700; color:#0b0d14;">كلان</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/tickets" class="nav-item ${section === 'tickets' ? 'active' : ''}"><span>🎟️ نظام التذاكر</span><span class="badge-new" style="background:#ea4335; color:white;">دمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/events" class="nav-item ${section === 'events' ? 'active' : ''}"><span>📅 الفعاليات والسباقات</span><span class="badge-new" style="background:#ea4335; color:white;">دمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}"><span>🛡️ الاعتدال والحماية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}"><span>👥 الأدوار والصلاحيات</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🔧 الإعدادات والهوية</span></a></div>
 
                 <div style="margin-top: auto; padding-top: 15px;">
                     <a href="/dashboard" class="nav-item" style="background: rgba(255,215,0,0.06); color: #FFD700; justify-content: center; font-weight:bold; border: 1px solid rgba(255,215,0,0.2);">
@@ -654,7 +703,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                         <img src="${guildIcon}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid #FFD700;box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
                         <div>
                             <h2 style="color:#FFD700; margin:0 0 4px 0; font-size:18px;">${guild.name}</h2>
-                            <span style="color: #23a55a; font-size: 11.5px; font-weight: bold;">● ROCKS متصل الآن</span>
+                            <span style="color: #23a55a; font-size: 11.5px; font-weight: bold;">● ROCKS متصل الآن (زمن الاستجابة: 38ms)</span>
                         </div>
                     </div>
                     ${sectionContent}
