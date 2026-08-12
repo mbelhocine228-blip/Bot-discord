@@ -18,9 +18,6 @@ const client = new Client({
 
 const guildSettings = new Map();
 
-// ==========================================
-// نظام التحكم والتفعيل لكل سيرفر (Toggle System)
-// ==========================================
 const serverFeatures = new Map();
 
 function getGuildFeatures(guildId) {
@@ -67,7 +64,6 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// قائمة الـ 30 أمراً الأصلية مع شروحاتها
 const botCommandsList = [
     { name: 'ban', desc: 'حظر عضو من السيرفر' },
     { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
@@ -143,7 +139,6 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
     } catch (error) { console.error(error); }
 
-    // نظام إرسال الأخبار التلقائي كل 20 دقيقة
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
@@ -175,7 +170,6 @@ client.once('ready', async () => {
     }, 20 * 60 * 1000);
 });
 
-// نظام حماية الرسائل وتطبيق الفلاتر وحذف الملفات والروابط
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
@@ -233,51 +227,74 @@ const rksThemeStyle = `
         flex-direction: row-reverse;
     }
     .sidebar {
-        width: 270px;
-        min-width: 270px;
+        width: 280px;
+        min-width: 280px;
         background: rgba(13, 15, 22, 0.98);
         backdrop-filter: blur(15px);
         border-right: 1px solid rgba(255, 215, 0, 0.1);
         display: flex;
         flex-direction: column;
-        padding: 20px 15px;
+        padding: 15px 12px;
         box-shadow: -5px 0 30px rgba(0,0,0,0.7);
         overflow-y: auto;
-        max-height: 100vh;
+        height: 100vh;
         position: sticky;
         top: 0;
     }
     .sidebar h3 {
         color: #FFD700;
-        font-size: 18px;
-        margin: 5px 0 20px 0;
+        font-size: 17px;
+        margin: 5px 0 15px 0;
         text-align: center;
         letter-spacing: 1px;
     }
-    .nav-category {
-        font-size: 11px;
-        text-transform: uppercase;
-        color: #8c909a;
-        margin: 18px 10px 8px 10px;
-        font-weight: bold;
-        letter-spacing: 1.2px;
+    .nav-group {
+        margin-bottom: 5px;
     }
-    .sidebar a {
+    .nav-item {
         color: #c4c9d4;
         text-decoration: none;
         padding: 11px 14px;
         border-radius: 10px;
-        margin-bottom: 6px;
         font-size: 14px;
         transition: 0.25s;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        cursor: pointer;
+        background: transparent;
+        width: 100%;
+        border: none;
+        text-align: right;
     }
-    .sidebar a:hover, .sidebar a.active {
+    .nav-item:hover, .nav-item.active {
         background: rgba(255, 215, 0, 0.12);
         color: #FFD700;
-        border-left: 3px solid #FFD700;
+    }
+    .nav-sub {
+        padding-right: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 4px;
+        margin-bottom: 6px;
+        border-right: 2px solid rgba(255, 215, 0, 0.2);
+        margin-right: 14px;
+    }
+    .nav-sub a {
+        color: #99aab5;
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .nav-sub a:hover, .nav-sub a.active {
+        background: rgba(255, 215, 0, 0.08);
+        color: #FFD700;
     }
     .badge-new {
         background: #FFD700;
@@ -382,18 +399,18 @@ const rksThemeStyle = `
     input:checked + .slider { background-color: #FFD700; }
     input:checked + .slider:before { transform: translateX(24px); background-color: #0b0d14; }
 
-    @media (max-width: 768px) {
-        body { flex-direction: column; }
+    @media (max-width: 900px) {
+        body { flex-direction: column !important; }
         .sidebar {
-            width: 100%;
-            min-width: 100%;
-            max-height: auto;
-            position: relative;
+            width: 100% !important;
+            min-width: 100% !important;
+            height: auto !important;
+            position: relative !important;
             box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-            border-right: none;
+            border-right: none !important;
             border-bottom: 1px solid rgba(255, 215, 0, 0.1);
         }
-        .main-content { padding: 15px; }
+        .main-content { padding: 15px; width: 100%; }
         .glass-card { padding: 18px; }
     }
 `;
@@ -408,7 +425,7 @@ app.get('/dashboard', (req, res) => {
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
         let iconUrl = guild.iconURL({ size: 256 }) ? guild.iconURL({ size: 256 }) : 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f916.png';
-        guildsHtml += `<a href="/control/${guild.id}/commands" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(30,33,48,0.8);padding:18px;border-radius:16px;width:140px;border:1px solid rgba(255,215,0,0.15);transition:0.3s;"><img src="${iconUrl}" style="width:65px;height:65px;border-radius:50%;object-fit:cover;margin-bottom:10px;box-shadow: 0 4px 15px rgba(0,0,0,0.5);"><span style="font-size:13px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
+        guildsHtml += `<a href="/control/${guild.id}/stats" style="text-decoration:none;color:white;display:flex;flex-direction:column;align-items:center;background:rgba(30,33,48,0.8);padding:18px;border-radius:16px;width:140px;border:1px solid rgba(255,215,0,0.15);transition:0.3s;"><img src="${iconUrl}" style="width:65px;height:65px;border-radius:50%;object-fit:cover;margin-bottom:10px;box-shadow: 0 4px 15px rgba(0,0,0,0.5);"><span style="font-size:13px;font-weight:bold;text-align:center;">${guild.name}</span></a>`;
     });
     res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>الخوادم المتصلة - ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,215,0,0.1); padding-bottom: 15px;"><h3 style="margin:0; color:#FFD700; font-size: 18px;">👋 أهلاً بك، ${req.user.username}</h3><div><a href="/logout" style="background:rgba(237,66,69,0.2); color:#ed4245; padding:6px 12px; text-decoration:none; border-radius:8px; font-size:12px; font-weight:bold; border:1px solid rgba(237,66,69,0.4);">تسجيل خروج</a></div></div><p style="color:#b9bbbe; font-size:13.5px; margin-bottom:18px;">اختر السيرفر أدناه لإدارة إعداداته ومكتبة الأوامر الخاصة به:</p><div style="display:flex; gap:15px; flex-wrap:wrap; justify-content:center;">${guildsHtml}</div></div></body></html>`);
 });
@@ -494,11 +511,11 @@ app.get('/control/:guildId/:section', (req, res) => {
     } else {
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🛡️ الحماية والأقسام المتقدمة</h3>
-                <p style="color:#b9bbbe; font-size:13px;">أدوات حماية المجتمع وإدارة الرتب بذكاء.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📁 قسم ${section}</h3>
+                <p style="color:#b9bbbe; font-size:13px;">إدارة خصائص وإعدادات هذا القسم بكفاءة تامة داخل سيرفرك.</p>
             </div>
             <div class="section-box" style="font-size:13.5px;">
-                🟢 هذا القسم مفعل وجاهز بالكامل للعمل داخل خادمك.
+                🟢 هذا القسم مفعل وجاهز بالكامل للتحكم.
             </div>
         `;
     }
@@ -516,21 +533,78 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="sidebar">
                 <h3>مركز قيادة ROCKS</h3>
                 
-                <div class="nav-category">نظرة عامة</div>
-                <a href="/control/${guild.id}/stats" class="${section === 'stats' ? 'active' : ''}">📊 نظرة عامة</a>
-                <a href="/control/${guild.id}/commands" class="${section === 'commands' ? 'active' : ''}">⚡ مكتبة الأوامر</a>
-                <a href="/control/${guild.id}/racing" class="${section === 'racing' ? 'active' : ''}">🏎️ أخبار Racing <span class="badge-new">جديد</span></a>
-                
-                <div class="nav-category">إدارة الخوادم</div>
-                <a href="/control/${guild.id}/roles" class="${section === 'roles' ? 'active' : ''}">🛡️ الرتب والصلاحيات</a>
-                <a href="/control/${guild.id}/automod" class="${section === 'automod' ? 'active' : ''}">🤖 الحماية الذكية</a>
-                <a href="/control/${guild.id}/logs" class="${section === 'logs' ? 'active' : ''}">📋 السجلات والحماية</a>
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}">
+                        <span>📊 نظرة عامة</span>
+                    </a>
+                </div>
 
-                <div class="nav-category">النظام</div>
-                <a href="/control/${guild.id}/settings" class="${section === 'settings' ? 'active' : ''}">⚙️ الإعدادات والهوية</a>
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}">
+                        <span>⚡ مكتبة الأوامر</span>
+                    </a>
+                </div>
 
-                <div style="margin-top: auto; padding-top: 20px;">
-                    <a href="/dashboard" style="background: rgba(255,215,0,0.06); color: #FFD700; text-align: center; border: 1px solid rgba(255,215,0,0.2); justify-content: center; font-weight:bold;">← العودة للخوادم</a>
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}">
+                        <span>🏎️ أخبار Racing</span>
+                        <span class="badge-new">جديد</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/discovery" class="nav-item ${section === 'discovery' ? 'active' : ''}">
+                        <span>🔍 اكتشاف الخادم</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}">
+                        <span>🛡️ الاعتدال والحماية</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}">
+                        <span>👥 الأدوار والصلاحيات</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/custom" class="nav-item ${section === 'custom' ? 'active' : ''}">
+                        <span>⚙️ الأوامر المخصصة</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <a href="/control/${guild.id}/notifications" class="nav-item ${section === 'notifications' ? 'active' : ''}">
+                        <span>🔔 إشعارات</span>
+                    </a>
+                </div>
+
+                <!-- قسم الجدوى والقوائم المنسدلة على شكل كارل بوت -->
+                <div class="nav-group">
+                    <div class="nav-item" style="color: #FFD700; font-weight: bold;">
+                        <span>📋 جدوى وأدوات</span>
+                    </div>
+                    <div class="nav-sub">
+                        <a href="/control/${guild.id}/greetings" class="${section === 'greetings' ? 'active' : ''}">📥 تحيات</a>
+                        <a href="/control/${guild.id}/dominance" class="${section === 'dominance' ? 'active' : ''}">⭐ ميمنة</a>
+                        <a href="/control/${guild.id}/embed" class="${section === 'embed' ? 'active' : ''}">🖼️ تضمين</a>
+                        <a href="/control/${guild.id}/suggestions" class="${section === 'suggestions' ? 'active' : ''}">💡 اقتراحات</a>
+                    </div>
+                </div>
+
+                <div class="nav-group" style="margin-top: 10px;">
+                    <a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}">
+                        <span>🛠️ الإعدادات والهوية</span>
+                    </a>
+                </div>
+
+                <div style="margin-top: auto; padding-top: 15px;">
+                    <a href="/dashboard" class="nav-item" style="background: rgba(255,215,0,0.06); color: #FFD700; justify-content: center; font-weight:bold; border: 1px solid rgba(255,215,0,0.2);">
+                        ← العودة للخوادم
+                    </a>
                 </div>
             </div>
             <div class="main-content">
