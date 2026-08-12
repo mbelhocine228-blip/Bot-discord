@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -77,8 +77,7 @@ const botCommandsList = [
     { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
     { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
     { name: 'say', desc: 'تكرار الكلام عبر البوت' },
-    { name: 'ann', desc: 'إعلان رسمي مع منشن عام' },
-    { name: 'announcement', desc: 'إرسال إعلان رسمي مع صورة وروم مخصص' },
+    { name: 'announcement', desc: 'إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص' },
     { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
     { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
     { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
@@ -115,12 +114,19 @@ const commands = [
     new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
-    new SlashCommandBuilder().setName('ann').setDescription('إعلان رسمي مع منشن عام').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
-    new SlashCommandBuilder().setName('announcement')
+    new SlashCommandBuilder()
+        .setName('announcement')
         .setDescription('إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
-        .addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم المخصص لإرسال الإعلان فيه').addChannelTypes(ChannelType.GuildText).setRequired(true))
-        .addAttachmentOption(opt => opt.setName('image').setDescription('قم بإرفاق صورة الإعلان').setRequired(false)),
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('اختر الروم المراد إرسال الإعلان فيه')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(true))
+        .addAttachmentOption(option =>
+            option.setName('image')
+                .setDescription('اختر صورة الإعلان المراد إرفاقها')
+                .setRequired(false)),
     new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
     new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
     new SlashCommandBuilder().setName('avatar').setDescription('عرض صورة بروفايلك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
@@ -134,7 +140,7 @@ const commands = [
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
     new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
-    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
+    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance (مثلاً: Results Revealed)').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel (مثلاً: 2d 2h 54m)').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة فعالية سباق جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -150,7 +156,7 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام الإعلانات والأوقات بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر ونظام التحديث الصامت بنجاح.');
     } catch (error) { console.error(error); }
 
     setInterval(() => {
@@ -204,46 +210,6 @@ app.post('/control/:guildId/racing/save', (req, res) => {
     guildSettings.set(guildId, settings);
     
     res.redirect(`/control/${guildId}/racing?saved=true`);
-});
-
-app.post('/api/send-announcement', async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ success: false, error: 'غير مسجل الدخول' });
-    const { guildId, channelId, imageUrl, messageText } = req.body;
-
-    try {
-        const guild = client.guilds.cache.get(guildId);
-        if (!guild) return res.status(404).json({ success: false, error: 'السيرفر غير موجود' });
-
-        const targetChannel = guild.channels.cache.get(channelId);
-        if (!targetChannel) return res.status(404).json({ success: false, error: 'الروم غير موجود' });
-
-        const embed = new EmbedBuilder()
-            .setColor('#1e2124')
-            .setTitle('🔥 إعلان رسمي من إدارة كلان 🏎️ RKS POWER 🔥')
-            .setDescription(messageText || 
-                '🏆 **Join RKS POWER Club!** 🏆\n\n' +
-                'يا شباب، فعاليات ومهمات الكلان شعلت نار! 🔥 شدُو الهمة وخلونا نرفع اسم **RKS POWER** فوق في الترتيب 🏆\n\n' +
-                '📍 **المهام الحالية:**\n' +
-                '• **مهمات السباقات اليومية:** لا تفوتوا أي محاولة لجمع النقاط لصالح الكلان! 🏎️💨\n' +
-                '• **فعاليات الكلان (Endurance & Duel):** شاركوا الآن وسجلوا حضوركم بقوة. ⏳ ⚡\n\n' +
-                'كل نقطة تحسب وتفرق معنا في لفل الكلان والترتيب العام.\n' +
-                'أدخلوا اللعبة الآن وخلصوا مهماتكم! 💪'
-            );
-
-        if (imageUrl) {
-            embed.setImage(imageUrl);
-        }
-
-        await targetChannel.send({
-            content: '@here @everyone',
-            embeds: [embed]
-        });
-
-        res.json({ success: true, message: 'تم إرسال الإعلان بنجاح!' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, error: 'حدث خطأ أثناء إرسال الإعلان.' });
-    }
 });
 
 const rksThemeStyle = `
@@ -358,7 +324,7 @@ const rksThemeStyle = `
         border: 1px solid rgba(255, 215, 0, 0.08);
         text-align: right;
     }
-    select, input, textarea {
+    select, input {
         width: 100%;
         padding: 12px;
         background: rgba(0, 0, 0, 0.5);
@@ -370,7 +336,7 @@ const rksThemeStyle = `
         outline: none;
         transition: 0.2s;
     }
-    select:focus, input:focus, textarea:focus {
+    select:focus, input:focus {
         border-color: #FFD700;
         box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
     }
@@ -478,66 +444,17 @@ app.get('/control/:guildId/:section', (req, res) => {
         const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ روم الأخبار والتفعيل بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News & Announcements</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وإرسال الإعلانات المخصصة مع الصور.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News & Club Timers</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وأوقات مهام الكلان.</p>
             </div>
             ${savedAlert}
             <div class="section-box">
                 <form action="/control/${guild.id}/racing/save" method="POST">
                     <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار والمهام التلقائي:</label>
                     <select name="newsChannelId">${channelsList}<option value="">-- إيقاف التفعيل --</option></select>
-                    <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ إعدادات الأخبار 🚀</button>
+                    <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ التغييرات 🚀</button>
                 </form>
             </div>
-
-            <div class="section-box" style="margin-top:20px;">
-                <h4 style="color:#FFD700; margin-top:0; font-size:16px;">📢 إرسال إعلان رسمي من لوحة التحكم</h4>
-                <div style="margin-top:10px;">
-                    <label style="font-size:13px; color:#b9bbbe;">اختر الروم المستهدف:</label>
-                    <select id="annChannel">${channelsList}</select>
-                </div>
-                <div style="margin-top:10px;">
-                    <label style="font-size:13px; color:#b9bbbe;">رابط الصورة (اختياري):</label>
-                    <input type="text" id="annImageUrl" placeholder="https://example.com/image.png">
-                </div>
-                <div style="margin-top:10px;">
-                    <label style="font-size:13px; color:#b9bbbe;">نص الإعلان:</label>
-                    <textarea id="annText" rows="4" placeholder="اكتب نص الإعلان هنا..."></textarea>
-                </div>
-                <button type="button" class="btn-gold" style="margin-top:15px; width:100%;" onclick="sendDashboardAnnouncement('${guild.id}')">إرسال الإعلان مع المنشن 📤</button>
-                <div id="annResponse" style="margin-top:10px; font-size:13px; font-weight:bold;"></div>
-            </div>
-
-            <script>
-            async function sendDashboardAnnouncement(guildId) {
-                const channelId = document.getElementById('annChannel').value;
-                const imageUrl = document.getElementById('annImageUrl').value;
-                const messageText = document.getElementById('annText').value;
-                const respDiv = document.getElementById('annResponse');
-
-                respDiv.style.color = '#FFD700';
-                respDiv.innerText = '⏳ جاري إرسال الإعلان...';
-
-                try {
-                    const res = await fetch('/api/send-announcement', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ guildId, channelId, imageUrl, messageText })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        respDiv.style.color = '#23a55a';
-                        respDiv.innerText = '✅ تم إرسال الإعلان بنجاح إلى السيرفر!';
-                    } else {
-                        respDiv.style.color = '#ed4245';
-                        respDiv.innerText = '❌ خطأ: ' + (data.error || 'فشل الإرسال');
-                    }
-                } catch(e) {
-                    respDiv.style.color = '#ed4245';
-                    respDiv.innerText = '❌ حدث خطأ في الاتصال بالخادم.';
-                }
-            }
-            </script>
         `;
     } else if (section === 'stats') {
         sectionContent = `
@@ -664,10 +581,8 @@ client.on('interactionCreate', async interaction => {
 
     try {
         if (commandName === 'announcement') {
-            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
-            
             await interaction.deferReply({ ephemeral: true });
+
             const targetChannel = options.getChannel('channel');
             const imageAttachment = options.getAttachment('image');
 
@@ -688,40 +603,17 @@ client.on('interactionCreate', async interaction => {
                 embed.setImage(imageAttachment.url);
             }
 
-            await targetChannel.send({
-                content: '@here @everyone',
-                embeds: [embed]
-            });
+            try {
+                await targetChannel.send({
+                    content: '@here @everyone',
+                    embeds: [embed]
+                });
 
-            await interaction.editReply({ content: `✅ تم إرسال الإعلان بنجاح إلى الروم: ${targetChannel}` });
-        }
-        else if (commandName === 'ticketsetup') {
-            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('create_ticket').setLabel('🎫 فتح تذكرة دعم').setStyle(ButtonStyle.Primary)
-            );
-
-            const embed = new EmbedBuilder()
-                .setTitle('🎟️ نظام التذاكر - RKS•ＰＯＷＥＲ')
-                .setDescription('اضغط على الزر أدناه لفتح تذكرة خاصة والتواصل مع الإدارة.')
-                .setColor('#FFD700');
-
-            await interaction.channel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر بنجاح.', ephemeral: true });
-        }
-        else if (commandName === 'applysetup') {
-            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
-
-            const embed = new EmbedBuilder()
-                .setTitle('📝 التقديم على كلان RKS•ＰＯＷＥＲ')
-                .setDescription('إذا كنت تريد الانضمام إلى الكلان، افتح تذكرة وابدأ التقديم معنا.')
-                .setColor('#FFD700');
-
-            await interaction.channel.send({ embeds: [embed] });
-            await interaction.reply({ content: '✅ تم إرسال رسالة التقديم بنجاح.', ephemeral: true });
+                await interaction.editReply({ content: `✅ تم إرسال الإعلان بنجاح إلى الروم: ${targetChannel}` });
+            } catch (error) {
+                console.error(error);
+                await interaction.editReply({ content: '❌ حدث خطأ أثناء إرسال الإعلان، تأكد من صلاحيات البوت في الروم المختار.' });
+            }
         }
         else if (commandName === 'setclubtimer') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
@@ -736,7 +628,7 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.reply({ 
-                content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\``, 
+                content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\`\n*(سيعتمدها البوت في التحديثات التلقائية القادمة)*`, 
                 ephemeral: true 
             });
         }
@@ -753,13 +645,6 @@ client.on('interactionCreate', async interaction => {
         }
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
-        }
-        else if (commandName === 'clear') {
-            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
-            const count = options.getInteger('count');
-            await interaction.channel.bulkDelete(count, true).catch(() => {});
-            await interaction.reply({ content: `✅ تم مسح ${count} رسالة بنجاح.`, ephemeral: true });
         }
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
