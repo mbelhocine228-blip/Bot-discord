@@ -134,7 +134,7 @@ const commands = [
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
     new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
-    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance (مثلاً: Results Revealed)').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel (مثلاً: 2d 2h 54m)').setRequired(true)),
+    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة فعالية سباق جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -206,9 +206,8 @@ app.post('/control/:guildId/racing/save', (req, res) => {
     res.redirect(`/control/${guildId}/racing?saved=true`);
 });
 
-// API للوحة التحكم لإرسال الإعلانات مع صورة وروم مخصص
 app.post('/api/send-announcement', async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ success: false, error: 'غير авториזد' });
+    if (!req.isAuthenticated()) return res.status(401).json({ success: false, error: 'غير مسجل الدخول' });
     const { guildId, channelId, imageUrl, messageText } = req.body;
 
     try {
@@ -696,6 +695,34 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.editReply({ content: `✅ تم إرسال الإعلان بنجاح إلى الروم: ${targetChannel}` });
         }
+        else if (commandName === 'ticketsetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('create_ticket').setLabel('🎫 فتح تذكرة دعم').setStyle(ButtonStyle.Primary)
+            );
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎟️ نظام التذاكر - RKS•ＰＯＷＥＲ')
+                .setDescription('اضغط على الزر أدناه لفتح تذكرة خاصة والتواصل مع الإدارة.')
+                .setColor('#FFD700');
+
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'applysetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+
+            const embed = new EmbedBuilder()
+                .setTitle('📝 التقديم على كلان RKS•ＰＯＷＥＲ')
+                .setDescription('إذا كنت تريد الانضمام إلى الكلان، افتح تذكرة وابدأ التقديم معنا.')
+                .setColor('#FFD700');
+
+            await interaction.channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال رسالة التقديم بنجاح.', ephemeral: true });
+        }
         else if (commandName === 'setclubtimer') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
                 return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
@@ -709,7 +736,7 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.reply({ 
-                content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\`\n*(سيعتمدها البوت في التحديثات التلقائية القادمة)*`, 
+                content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\``, 
                 ephemeral: true 
             });
         }
@@ -726,6 +753,13 @@ client.on('interactionCreate', async interaction => {
         }
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
+        }
+        else if (commandName === 'clear') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
+            const count = options.getInteger('count');
+            await interaction.channel.bulkDelete(count, true).catch(() => {});
+            await interaction.reply({ content: `✅ تم مسح ${count} رسالة بنجاح.`, ephemeral: true });
         }
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
