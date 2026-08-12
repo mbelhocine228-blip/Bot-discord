@@ -106,18 +106,18 @@ const botCommandsList = [
 ];
 
 const commands = [
-    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('mute').setDescription('كتم عضو مؤقتاً').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('unmute').setDescription('فك الكتم عن عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل بسرعة').addIntegerOption(opt => opt.setName('count').setDescription('العدد').setRequired(true)),
-    new SlashCommandBuilder().setName('warn').setDescription('تحذير عضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('lock').setDescription('قفل الروم الحالي'),
-    new SlashCommandBuilder().setName('unlock').setDescription('فتح الروم الحالي'),
-    new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
+    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('mute').setDescription('كتم عضو مؤقتاً').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('unmute').setDescription('فك الكتم عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل بسرعة').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addIntegerOption(opt => opt.setName('count').setDescription('العدد').setRequired(true)),
+    new SlashCommandBuilder().setName('warn').setDescription('تحذير عضو').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('lock').setDescription('قفل الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder().setName('unlock').setDescription('فتح الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels).addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
-    new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
+    new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder()
         .setName('announcement')
         .setDescription('إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص')
@@ -754,10 +754,64 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (!interaction.isChatInputCommand()) return;
-    const { commandName, options, member, guild } = interaction;
+    const { commandName, options, member, guild, channel } = interaction;
 
     try {
-        if (commandName === 'announcement') {
+        if (commandName === 'clear') {
+            const count = options.getInteger('count');
+            if (count < 1 || count > 100) {
+                return interaction.reply({ content: '❌ يجب تحديد عدد رسائل بين 1 و 100 للحذف.', ephemeral: true });
+            }
+            await interaction.deferReply({ ephemeral: true });
+            const deleted = await channel.bulkDelete(count, true).catch(() => null);
+            if (!deleted) {
+                return interaction.editReply({ content: '❌ حدث خطأ، تأكد من صلاحيات البوت (Manage Messages) أو أن الرسائل ليست أقدم من 14 يوماً.' });
+            }
+            await interaction.editReply({ content: `✅ تم مسح **${deleted.size}** رسالة بنجاح.` });
+        }
+        else if (commandName === 'ban') {
+            const targetUser = options.getUser('user');
+            const reason = options.getString('reason') || 'لا يوجد سبب';
+            const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+            if (!targetMember) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر.', ephemeral: true });
+            
+            await targetMember.ban({ reason });
+            await interaction.reply({ content: `✅ تم حظر العضو ${targetUser.tag} بنجاح. السبب: ${reason}`, ephemeral: true });
+        }
+        else if (commandName === 'kick') {
+            const targetUser = options.getUser('user');
+            const reason = options.getString('reason') || 'لا يوجد سبب';
+            const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+            if (!targetMember) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر.', ephemeral: true });
+            
+            await targetMember.kick(reason);
+            await interaction.reply({ content: `✅ تم طرد العضو ${targetUser.tag} بنجاح.`, ephemeral: true });
+        }
+        else if (commandName === 'mute') {
+            const targetUser = options.getUser('user');
+            const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+            if (!targetMember) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر.', ephemeral: true });
+            
+            await targetMember.timeout(10 * 60 * 1000, 'Muted by moderator');
+            await interaction.reply({ content: `✅ تم كتم العضو ${targetUser.tag} لمدة 10 دقائق بنجاح.`, ephemeral: true });
+        }
+        else if (commandName === 'unmute') {
+            const targetUser = options.getUser('user');
+            const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+            if (!targetMember) return interaction.reply({ content: '❌ العضو غير موجود في السيرفر.', ephemeral: true });
+            
+            await targetMember.timeout(null);
+            await interaction.reply({ content: `✅ تم فك الكتم عن العضو ${targetUser.tag} بنجاح.`, ephemeral: true });
+        }
+        else if (commandName === 'lock') {
+            await channel.permissionOverwrites.edit(guild.id, { SendMessages: false });
+            await interaction.reply({ content: '🔒 تم قفل الروم بنجاح، لا يمكن للأعضاء التحدث الآن.' });
+        }
+        else if (commandName === 'unlock') {
+            await channel.permissionOverwrites.edit(guild.id, { SendMessages: null });
+            await interaction.reply({ content: '🔓 تم فتح الروم بنجاح.' });
+        }
+        else if (commandName === 'announcement') {
             await interaction.deferReply({ ephemeral: true });
 
             const targetChannel = options.getChannel('channel');
@@ -813,12 +867,12 @@ client.on('interactionCreate', async interaction => {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
                 return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
             
-            const channel = options.getChannel('channel');
+            const channelOpt = options.getChannel('channel');
             let settings = guildSettings.get(guild.id) || {};
-            settings.newsChannelId = channel.id;
+            settings.newsChannelId = channelOpt.id;
             guildSettings.set(guild.id, settings);
             
-            await interaction.reply({ content: `✅ تم تعيين روم الأخبار والمهام التلقائي بنجاح: ${channel}`, ephemeral: true });
+            await interaction.reply({ content: `✅ تم تعيين روم الأخبار والمهام التلقائي بنجاح: ${channelOpt}`, ephemeral: true });
         }
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
@@ -828,7 +882,7 @@ client.on('interactionCreate', async interaction => {
         }
     } catch (err) {
         console.error(err);
-        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر.', ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
     }
 });
 
