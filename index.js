@@ -19,9 +19,9 @@ const client = new Client({
 const guildSettings = new Map();
 
 // ==========================================
-// نظام التحكم في تفعيل وتعطيل الميزات (Features Toggle System)
+// نظام التحكم والتفعيل لكل سيرفر (Toggle System)
 // ==========================================
-const serverFeatures = new Map(); // لتخزين حالة تفعيل كل ميزة لكل سيرفر
+const serverFeatures = new Map();
 
 function getGuildFeatures(guildId) {
     if (!serverFeatures.has(guildId)) {
@@ -67,7 +67,7 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
-// قائمة الـ 30 أمراً الأصلية مع شروحاتها لتظهر بالكامل في لوحة التحكم
+// قائمة الـ 30 أمراً الأصلية مع شروحاتها
 const botCommandsList = [
     { name: 'ban', desc: 'حظر عضو من السيرفر' },
     { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
@@ -143,6 +143,7 @@ client.once('ready', async () => {
         console.log('🔄 تم تسجيل جميع الأوامر بنجاح.');
     } catch (error) { console.error(error); }
 
+    // نظام إرسال الأخبار التلقائي كل 20 دقيقة
     setInterval(() => {
         const newsItems = [
             "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
@@ -179,19 +180,16 @@ client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
 
-    // 1. حماية الروابط (Linkspam)
     if (features.linkspam && (message.content.includes('http://') || message.content.includes('https://') || message.content.includes('discord.gg'))) {
-        // يمكنك إضافة استثناءات هنا إذا أردت
+        // حماية الروابط
     }
 
-    // 2. فلترة الكلمات (Censor)
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
-        return message.channel.send(`⚠️ ${message.author.mention}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+        return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
     }
 
-    // 3. حذف الملفات غير المسموحة (Deletefiles)
     if (features.deletefiles && message.attachments.size > 0) {
         const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webm', '.mp4', '.gif', '.pdf', '.txt'];
         let hasInvalidFile = false;
@@ -202,7 +200,7 @@ client.on('messageCreate', async message => {
         });
         if (hasInvalidFile) {
             await message.delete().catch(() => {});
-            return message.channel.send(`🚫 ${message.author.mention}, هذا النوع من الملفات غير مسموح به هنا!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+            return message.channel.send(`🚫 ${message.author}, هذا النوع من الملفات غير مسموح به هنا!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
         }
     }
 });
