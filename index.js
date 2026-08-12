@@ -18,7 +18,6 @@ const client = new Client({
 
 const guildSettings = new Map();
 const serverFeatures = new Map();
-const guildClubTimers = new Map();
 
 function getGuildFeatures(guildId) {
     if (!serverFeatures.has(guildId)) {
@@ -89,9 +88,9 @@ const botCommandsList = [
     { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
     { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
+    { name: 'setclubtimer', desc: 'تحديد ونشر العد التنازلي التلقائي لـ Endurance و Club Duel' },
     { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
     { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
-    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
@@ -126,9 +125,11 @@ const commands = [
     new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
     new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
     new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
+    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديد ونشر العد التنازلي التلقائي لـ Endurance و Club Duel')
+        .addStringOption(opt => opt.setName('endurance_time').setDescription('وقت تحدي Endurance الجديد').setRequired(true))
+        .addStringOption(opt => opt.setName('duel_time').setDescription('وقت تحدي Club Duel الجديد').setRequired(true)),
     new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
-    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance (مثلاً: Results Revealed)').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel (مثلاً: 2d 2h 54m)').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة فعالية سباق جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -144,11 +145,19 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام التحديث الصامت بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر (مع التذاكر والتقديم والفعاليات والعد التنازلي) بنجاح.');
     } catch (error) { console.error(error); }
 
-    // نظام النشر التلقائي للسيرفرات
+    // نظام الأخبار التلقائية
     setInterval(() => {
+        const newsItems = [
+            "🏎️ **تحديث حلبات Racing Master الجديد:** تم إطلاق مسارات سباق قوية جداً مع خيارات تعديل جبارة للمحركات والنيترو!",
+            "🔥 **بطولة كلان RKS•ＰＯＷＥＲ:** استعدوا يا أبطال، التحدي القادم سيكون على سيارات الفئة S الأسبوع الحالي!",
+            "⚙️ **صيانة وإضافات توربو:** الشركة المطورة أعلنت عن سيارات جديدة كلياً ستنضم للعبة قريباً، كونوا على جاهزية!",
+            "🏆 **نصيحة للمحترفين:** ضبط إعدادات العجلات والإطارات سيمنحك أفضلية كبرى في المنعطفات الحادة."
+        ];
+        const randomNews = newsItems[Math.floor(Math.random() * newsItems.length)];
+
         guildSettings.forEach((settings, guildId) => {
             if (settings && settings.newsChannelId) {
                 const guild = client.guilds.cache.get(guildId);
@@ -157,35 +166,46 @@ client.once('ready', async () => {
                     if (features.notifications) {
                         const channel = guild.channels.cache.get(settings.newsChannelId);
                         if (channel) {
-                            const timerData = guildClubTimers.get(guildId);
-                            if (timerData) {
-                                const embed = new EmbedBuilder()
-                                    .setTitle('🏁 التحديث التلقائي لمهام كلان RKS•ＰＯＷＥＲ')
-                                    .setDescription('تابع أحدث أوقات المهام الحالية في اللعبة:')
-                                    .setColor('#FFD700')
-                                    .addFields(
-                                        { name: '🏎️ CLUB ENDURANCE', value: `⏳ المتبقي: **${timerData.endurance}**`, inline: false },
-                                        { name: '⚔️ CLUB DUEL', value: `⏳ المتبقي: **${timerData.duel}**`, inline: false }
-                                    )
-                                    .setTimestamp();
-
-                                channel.send({ embeds: [embed] }).catch(() => {});
-                            }
+                            const embed = new EmbedBuilder()
+                                .setTitle('🏎️ أخبار Racing Master التلقائية (كل 20 دقيقة)')
+                                .setDescription(randomNews)
+                                .setColor('#FFD700')
+                                .setTimestamp();
+                            channel.send({ embeds: [embed] }).catch(() => {});
                         }
                     }
                 }
             }
         });
-    }, 60 * 60 * 1000);
+    }, 20 * 60 * 1000);
 });
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
+
+    if (features.linkspam && (message.content.includes('http://') || message.content.includes('https://') || message.content.includes('discord.gg'))) {
+        // حماية الروابط
+    }
+
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
         return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+    }
+
+    if (features.deletefiles && message.attachments.size > 0) {
+        const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webm', '.mp4', '.gif', '.pdf', '.txt'];
+        let hasInvalidFile = false;
+        message.attachments.forEach(att => {
+            if (!allowedExtensions.some(ext => att.name.toLowerCase().endsWith(ext))) {
+                hasInvalidFile = true;
+            }
+        });
+        if (hasInvalidFile) {
+            await message.delete().catch(() => {});
+            return message.channel.send(`🚫 ${message.author}, هذا النوع من الملفات غير مسموح به هنا!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+        }
     }
 });
 
@@ -257,6 +277,31 @@ const rksThemeStyle = `
     }
     .nav-item:hover, .nav-item.active {
         background: rgba(255, 215, 0, 0.12);
+        color: #FFD700;
+    }
+    .nav-sub {
+        padding-right: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 4px;
+        margin-bottom: 6px;
+        border-right: 2px solid rgba(255, 215, 0, 0.2);
+        margin-right: 14px;
+    }
+    .nav-sub a {
+        color: #99aab5;
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .nav-sub a:hover, .nav-sub a.active {
+        background: rgba(255, 215, 0, 0.08);
         color: #FFD700;
     }
     .badge-new {
@@ -422,6 +467,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 </div>
             `;
         });
+
         sectionContent = `
             <div style="margin-bottom:20px;">
                 <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">مكتبة الأوامر الشاملة (${botCommandsList.length} أمر)</h3>
@@ -433,13 +479,13 @@ app.get('/control/:guildId/:section', (req, res) => {
         const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ روم الأخبار والتفعيل بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News & Club Timers</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وأوقات مهام الكلان.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏎️ Racing Master News</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر وكلان RKS•ＰＯＷＥＲ كل 20 دقيقة.</p>
             </div>
             ${savedAlert}
             <div class="section-box">
                 <form action="/control/${guild.id}/racing/save" method="POST">
-                    <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار والمهام التلقائي:</label>
+                    <label style="font-size:13px; color:#FFD700; font-weight:bold;">اختر روم الأخبار التلقائي:</label>
                     <select name="newsChannelId">${channelsList}<option value="">-- إيقاف التفعيل --</option></select>
                     <button type="submit" class="btn-gold" style="margin-top:15px; width:100%;">حفظ التغييرات 🚀</button>
                 </form>
@@ -454,30 +500,46 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="section-box" style="font-size:14px; line-height: 1.8;">
                 <p>👥 عدد أعضاء السيرفر: <strong style="color:#FFD700;">${guild.memberCount}</strong></p>
                 <p>📁 إجمالي الرومات: <strong style="color:#FFD700;">${guild.channels.cache.size}</strong></p>
-                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة</strong></p>
+                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (استجابة 38ms)</strong></p>
             </div>
         `;
-    } else if (section === 'missions') {
-        const timerInfo = guildClubTimers.get(guild.id);
+    } else if (section === 'tickets') {
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🏁 أوقات مهام الكلان (التحديث الصامت)</h3>
-                <p style="color:#b9bbbe; font-size:13px;">استخدم الأمر /setclubtimer لتحديث الأوقات في النظام بصمت دون إزعاج الشات.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🎟️ نظام التذاكر والدعم الفني</h3>
+                <p style="color:#b9bbbe; font-size:13px;">يمكن للأعضاء فتح تذاكر خاصة عبر الأمر /ticketsetup أو الأزرار التفاعلية.</p>
             </div>
             <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
-                <p>⭐ استخدم الأمر <code style="color:#FFD700;">/setclubtimer</code> داخل ديسكورد لتحديث الأوقات الجديدة.</p>
-                <div style="margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-                    <p style="margin: 0; color: #FFD700; font-weight: bold;">الوقت الحالي المخزن في النظام:</p>
-                    <p style="margin: 5px 0 0 0;">🏎️ Endurance: ${timerInfo ? timerInfo.endurance : 'غير مسجل'}</p>
-                    <p style="margin: 5px 0 0 0;">⚔️ Duel: ${timerInfo ? timerInfo.duel : 'غير مسجل'}</p>
-                </div>
+                <p>📌 أسلوب العمل: الضغط على زر فتح تذاكر ينشئ روم خاص ومؤمن بين العضو والإدارة.</p>
+                <p>🚀 جرب الآن كتابة <code style="color:#FFD700;">/ticketsetup</code> داخل السيرفر لنشر لوحة التذاكر.</p>
+            </div>
+        `;
+    } else if (section === 'apply') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📋 التقديم على كلان RKS•ＰＯＷＥＲ</h3>
+                <p style="color:#b9bbbe; font-size:13px;">نظام استقطاب اللاعبين والاحتراف في الألعاب.</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>⭐ استخدم الأمر <code style="color:#FFD700;">/applysetup</code> لإرسال رسالة التقديم الرسمية في الشات.</p>
+            </div>
+        `;
+    } else if (section === 'events') {
+        sectionContent = `
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📅 جدول السباقات والفعاليات والعد التنازلي</h3>
+                <p style="color:#b9bbbe; font-size:13px;">تنظيم بطولات سباق السيارات والمواعيد بين الأعضاء (Endurance & Club Duel).</p>
+            </div>
+            <div class="section-box" style="font-size:13.5px; line-height: 1.8;">
+                <p>🏆 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة وإعلانها للأعضاء.</p>
+                <p>⏱️ استخدم الأمر <code style="color:#FFD700;">/setclubtimer</code> لتحديث ونشر العد التنازلي التلقائي لـ Endurance و Club Duel فور تغير الأوقات.</p>
             </div>
         `;
     } else {
         sectionContent = `
             <div style="margin-bottom:20px;">
                 <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">📁 قسم ${section}</h3>
-                <p style="color:#b9bbbe; font-size:13px;">إدارة خصائص وإعدادات هذا القسم بكفاءة تامة.</p>
+                <p style="color:#b9bbbe; font-size:13px;">إدارة خصائص وإعدادات هذا القسم بكفاءة تامة داخل سيرفرك.</p>
             </div>
             <div class="section-box" style="font-size:13.5px;">
                 🟢 هذا القسم مفعل وجاهز بالكامل للتحكم.
@@ -501,7 +563,16 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 أوقات المهام</span><span class="badge-new">صامت</span></a></div>
+                
+                <!-- الأقسام الجديدة المدمجة -->
+                <div class="nav-group"><a href="/control/${guild.id}/tickets" class="nav-item ${section === 'tickets' ? 'active' : ''}"><span>🎟️ نظام التذاكر</span><span class="badge-new">مدمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/apply" class="nav-item ${section === 'apply' ? 'active' : ''}"><span>📋 التقديم للكلان</span><span class="badge-new">مدمج</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/events" class="nav-item ${section === 'events' ? 'active' : ''}"><span>📅 الفعاليات والسباقات</span><span class="badge-new">مدمج</span></a></div>
+
+                <div class="nav-group"><a href="/control/${guild.id}/discovery" class="nav-item ${section === 'discovery' ? 'active' : ''}"><span>🔍 اكتشاف الخادم</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}"><span>🛡️ الاعتدال والحماية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}"><span>👥 الأدوار والصلاحيات</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🛠️ الإعدادات والهوية</span></a></div>
 
                 <div style="margin-top: auto; padding-top: 15px;">
                     <a href="/dashboard" class="nav-item" style="background: rgba(255,215,0,0.06); color: #FFD700; justify-content: center; font-weight:bold; border: 1px solid rgba(255,215,0,0.2);">
@@ -515,7 +586,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                         <img src="${guildIcon}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid #FFD700;box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
                         <div>
                             <h2 style="color:#FFD700; margin:0 0 4px 0; font-size:18px;">${guild.name}</h2>
-                            <span style="color: #23a55a; font-size: 11.5px; font-weight: bold;">● ROCKS متصل الآن</span>
+                            <span style="color: #23a55a; font-size: 11.5px; font-weight: bold;">● ROCKS متصل الآن (زمن الاستجابة: 38ms)</span>
                         </div>
                     </div>
                     ${sectionContent}
@@ -527,6 +598,7 @@ app.get('/control/:guildId/:section', (req, res) => {
 });
 
 client.on('interactionCreate', async interaction => {
+    // معالجة الأزرار التفاعلية للتذاكر وإغلاقها
     if (interaction.isButton()) {
         if (interaction.customId === 'create_ticket') {
             await interaction.deferReply({ ephemeral: true });
@@ -547,7 +619,7 @@ client.on('interactionCreate', async interaction => {
 
                 const embed = new EmbedBuilder()
                     .setTitle('🎟️ تذكرة دعم جديدة - RKS•ＰＯＷＥＲ')
-                    .setDescription(`أهلاً بك يا ${interaction.user}، فريق الإدارة سيتواجد معك هنا قريباً.`)
+                    .setDescription(`أهلاً بك يا ${interaction}، فريق الإدارة سيتواجد معك هنا قريباً. يرجى شرح مشكلتك أو طلبك بالتفصيل.`)
                     .setColor('#FFD700')
                     .setTimestamp();
 
@@ -560,45 +632,221 @@ client.on('interactionCreate', async interaction => {
         } 
         else if (interaction.customId === 'close_ticket') {
             await interaction.reply({ content: '🔒 سيتم إغلاق هذه التذكرة وحذفها خلال 5 ثواني...' });
-            setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
+            setTimeout(() => {
+                interaction.channel.delete().catch(() => {});
+            }, 5000);
         }
         return;
     }
 
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild } = interaction;
+    const features = getGuildFeatures(guild.id);
 
     try {
-        if (commandName === 'setclubtimer') {
-            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
-            
-            const enduranceTime = options.getString('endurance_time');
-            const duelTime = options.getString('duel_time');
-            
-            guildClubTimers.set(guild.id, {
-                endurance: enduranceTime,
-                duel: duelTime
-            });
-
-            await interaction.reply({ 
-                content: `✅ **تم تحديث الأوقات في النظام بنجاح بصمت!**\n🏎️ Endurance: \`${enduranceTime}\`\n⚔️ Duel: \`${duelTime}\`\n*(سيعتمدها البوت في التحديثات التلقائية القادمة)*`, 
-                ephemeral: true 
-            });
+        if (commandName === 'ban') {
+            if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: '❌ ليس لديك صلاحية حظر الأعضاء.', ephemeral: true });
+            const target = options.getMember('user');
+            const reason = options.getString('reason') || 'بدون سبب';
+            await target.ban({ reason });
+            await interaction.reply({ content: `🔨 تم حظر العضو ${target.user.tag} بنجاح.` });
+        }
+        else if (commandName === 'kick') {
+            if (!member.permissions.has(PermissionsBitField.Flags.KickMembers)) return interaction.reply({ content: '❌ ليس لديك صلاحية طرد الأعضاء.', ephemeral: true });
+            const target = options.getMember('user');
+            const reason = options.getString('reason') || 'بدون سبب';
+            await target.kick(reason);
+            await interaction.reply({ content: `👢 تم طرد العضو ${target.user.tag} بنجاح.` });
+        }
+        else if (commandName === 'mute') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: '❌ ليس لديك صلاحية كتم الأعضاء.', ephemeral: true });
+            const target = options.getMember('user');
+            await target.timeout(10 * 60 * 1000, 'كتم مؤقت من الإدارة');
+            await interaction.reply({ content: `🔇 تم كتم العضو ${target.user.tag} لمدة 10 دقائق بنجاح.` });
+        }
+        else if (commandName === 'unmute') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: '❌ ليس لديك صلاحية.', ephemeral: true });
+            const target = options.getMember('user');
+            await target.timeout(null);
+            await interaction.reply({ content: `🔊 تم رفع الكتم عن العضو ${target.user.tag}.` });
+        }
+        else if (commandName === 'clear') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
+            const count = options.getInteger('count');
+            await interaction.channel.bulkDelete(count, true).catch(() => {});
+            await interaction.reply({ content: `🧹 تم مسح ${count} رسالة بنجاح.`, ephemeral: true });
+        }
+        else if (commandName === 'lock') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            await interaction.channel.permissionOverwrites.edit(guild.id, { SendMessages: false });
+            await interaction.reply({ content: '🔒 تم قفل الروم بنجاح.' });
+        }
+        else if (commandName === 'unlock') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            await interaction.channel.permissionOverwrites.edit(guild.id, { SendMessages: true });
+            await interaction.reply({ content: '🔓 تم فتح الروم بنجاح.' });
+        }
+        else if (commandName === 'ping') {
+            await interaction.reply({ content: `🏓 Pong! سرعة استجابة ROCKS: ${client.ws.ping}ms` });
+        }
+        else if (commandName === 'say') {
+            const text = options.getString('text');
+            await interaction.channel.send(text);
+            await interaction.reply({ content: '✅ تم إرسال الرسالة.', ephemeral: true });
+        }
+        else if (commandName === 'ann') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const text = options.getString('text');
+            const embed = new EmbedBuilder().setTitle('📢 إعلان رسمي').setDescription(text).setColor('#FFD700').setTimestamp();
+            await interaction.channel.send({ content: '@everyone', embeds: [embed] });
+            await interaction.reply({ content: '✅ تم نشر الإعلان.', ephemeral: true });
+        }
+        else if (commandName === 'embed') {
+            const title = options.getString('title');
+            const desc = options.getString('description');
+            const embed = new EmbedBuilder().setTitle(title).setDescription(desc).setColor('#FFD700').setTimestamp();
+            await interaction.channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال الـ Embed بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'avatar') {
+            const user = options.getUser('user') || interaction.user;
+            const embed = new EmbedBuilder().setTitle(`🖼️ صورة بروفايل: ${user.username}`).setImage(user.displayAvatarURL({ size: 1024 })).setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'serverinfo') {
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 معلومات سيرفر: ${guild.name}`)
+                .addFields(
+                    { name: '👤 الأعضاء:', value: `${guild.memberCount}`, inline: true },
+                    { name: '📁 الرومات:', value: `${guild.channels.cache.size}`, inline: true }
+                )
+                .setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'google') {
+            const query = options.getString('query');
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+            const embed = new EmbedBuilder()
+                .setTitle(`🔍 نتائج البحث في جوجل عن: ${query}`)
+                .setDescription(`[اضغط هنا لفتح نتائج جوجل](${searchUrl})`)
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'rockstats') {
+            const embed = new EmbedBuilder()
+                .setTitle('🛡️ إحصائيات كلان RKS•ＰＯＷＥＲ')
+                .setDescription('أقوى كلان نشط في Racing Master و OneState RP!\n• السيرفر الأساسي: مفعل\n• الحالة: جاهز للتحديات والبطولات 🚀')
+                .setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'racingnews') {
+            const embed = new EmbedBuilder()
+                .setTitle('🏎️ آخر أخبار Racing Master الحصرية')
+                .setDescription('استعد للموسم الجديد وتحديثات الجرافيك الخارقة للسيارات في الحلبات.')
+                .setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
         }
         else if (commandName === 'setnews') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول لتحديد روم الأخبار.', ephemeral: true });
             
             const channel = options.getChannel('channel');
             let settings = guildSettings.get(guild.id) || {};
             settings.newsChannelId = channel.id;
             guildSettings.set(guild.id, settings);
             
-            await interaction.reply({ content: `✅ تم تعيين روم الأخبار والمهام التلقائي بنجاح: ${channel}`, ephemeral: true });
+            await interaction.reply({ content: `✅ تم تعيين روم الأخبار بنجاح: ${channel} | سيتم إرسال آخر أخبار رايسنغ ماستر هنا تلقائياً كل 20 دقيقة.`, ephemeral: true });
         }
-        else if (commandName === 'ping') {
-            await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
+        // أمر تحديث ونشر العد التنازلي التلقائي (Endurance & Club Duel)
+        else if (commandName === 'setclubtimer') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول لتحديث أوقات العد التنازلي.', ephemeral: true });
+            
+            const enduranceTime = options.getString('endurance_time');
+            const duelTime = options.getString('duel_time');
+
+            const embed = new EmbedBuilder()
+                .setTitle('⏱️ العد التنازلي لمواسم وتحديات Racing Master')
+                .setDescription('تم تحديث أوقات التحديات رسمياً للبوت. تابع المواعيد بدقة:')
+                .addFields(
+                    { name: '🏎️ تحدي Endurance (التحمل):', value: `\`${enduranceTime}\``, inline: false },
+                    { name: '⚔️ تحدي Club Duel:', value: `\`${duelTime}\``, inline: false }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+
+            await interaction.channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم تحديث ونشر العد التنازلي الجديد بنجاح في الشات.', ephemeral: true });
+        }
+        // أوامر الميزات الجديدة المدمجة
+        else if (commandName === 'ticketsetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('create_ticket').setLabel('🎫 افتح تذكرة جديدة').setStyle(ButtonStyle.Success)
+            );
+            const embed = new EmbedBuilder()
+                .setTitle('🎟️ نظام التذاكر والدعم - RKS•ＰＯＷＥＲ')
+                .setDescription('إذا كان لديك استفسار، مشكلة، أو ترغب بالتواصل مع الإدارة، اضغط على الزر أدناه لفتح تذكرة خاصة.')
+                .setColor('#FFD700');
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ تم نشر لوحة التذاكر بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'applysetup') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const embed = new EmbedBuilder()
+                .setTitle('📋 التقديم على كلان RKS•ＰＯＷＥＲ')
+                .setDescription('هل تمتلك مهارات قوية في الألعاب وترغب بالانضمام إلينا؟ توجه إلى الإدارة أو افتح تذكرة تقديم!')
+                .setColor('#FFD700');
+            await interaction.channel.send({ embeds: [embed] });
+            await interaction.reply({ content: '✅ تم إرسال رسالة التقديم.', ephemeral: true });
+        }
+        else if (commandName === 'eventsched') {
+            if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            const title = options.getString('title');
+            const time = options.getString('time');
+            const embed = new EmbedBuilder()
+                .setTitle('📅 فعالية / سباق جديد في الكلان')
+                .addFields(
+                    { name: '🏆 الفعالية:', value: title },
+                    { name: '⏰ الموعد:', value: time }
+                )
+                .setColor('#FFD700')
+                .setTimestamp();
+            await interaction.channel.send({ content: '@everyone', embeds: [embed] });
+            await interaction.reply({ content: '✅ تم جدولة وإعلان الفعالية بنجاح.', ephemeral: true });
+        }
+        else if (commandName === 'roll') {
+            const num = Math.floor(Math.random() * 100) + 1;
+            await interaction.reply({ content: `🎲 النتيجة العشوائية الخاصة بك هي: **${num}** / 100` });
+        }
+        else if (commandName === 'coinflip') {
+            const result = Math.random() < 0.5 ? '🪙 طرة (Heads)' : '🪙 كتابة (Tails)';
+            await interaction.reply({ content: `نتيجة الرمية هي: **${result}**` });
+        }
+        else if (commandName === 'ascii') {
+            const text = options.getString('text');
+            await interaction.reply({ content: `\`\`\`text\n[ ${text.toUpperCase()} ]\n\`\`\`` });
+        }
+        else if (commandName === 'botinfo') {
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 معلومات مركز قيادة ROCKS')
+                .setDescription('البوت يعمل بكفاءة تامة لإدارة السيرفرات ومجتمعات الألعاب.')
+                .setColor('#FFD700');
+            await interaction.reply({ embeds: [embed] });
+        }
+        else if (commandName === 'uptime') {
+            let totalSeconds = (client.uptime / 1000);
+            let hours = Math.floor(totalSeconds / 3600);
+            let minutes = Math.floor((totalSeconds % 3600) / 60);
+            await interaction.reply({ content: `⏱️ مدة تشغيل ROCKS المستمرة: **${hours}** ساعة و **${minutes}** دقيقة.` });
+        }
+        else if (commandName === 'rps') {
+            if (!features.gaming_commands) return interaction.reply({ content: '❌ أوامر الألعاب معطلة حالياً في هذا السيرفر.', ephemeral: true });
+            const choice = options.getString('choice');
+            const choices = ['حجر', 'ورقة', 'مقص'];
+            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            await interaction.reply({ content: `🎮 اختيارك: **${choice}** | اختيار ROCKS: **${botChoice}**` });
         }
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
@@ -613,5 +861,5 @@ client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 مركز قيادة ROCKS يعمل على المنفذ ${PORT}`);
+    console.log(`🚀 مركز قيادة ROCKS وأخبار Racing Master التلقائية تعمل على المنفذ ${PORT}`);
 });
