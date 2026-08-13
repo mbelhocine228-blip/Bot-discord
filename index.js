@@ -21,6 +21,13 @@ const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
 
+// ==================== إعدادات نظام السبام المتقدم ====================
+const SPAM_LIMIT = 5;         // عدد الرسائل القصوى المسموحة
+const SPAM_INTERVAL = 5000;   // خلال كم مللي ثانية (5 ثوانٍ)
+const ADMIN_CHANNEL_ID = '000000000000000000'; // استبدل الأصفار بـ آيدي روم الإداريين الخاصة بك
+const userMessageMap = new Map();
+// ===================================================================
+
 function getDefaultConfig(guildId) {
     return {
         guildId,
@@ -223,13 +230,14 @@ client.once('ready', async () => {
     }, 60 * 60 * 1000);
 });
 
-const userMessageMap = new Map();
-
+// ==================== معالج الرسائل ونظام الحماية المدمج ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
+    
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
+    // 1. فلترة الكلمات الممنوعة (Bad Words)
     if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
         try {
             await message.delete();
@@ -238,6 +246,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // 2. منع سبام الملفات والصور (Attachment Spam)
     if (features.attachmentspam && message.attachments.size > 0) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
             await message.delete().catch(() => {});
@@ -245,12 +254,14 @@ client.on('messageCreate', async message => {
         }
     }
 
+    // 3. فلترة الكلمات الإضافية (Censor)
     const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
     if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
         await message.delete().catch(() => {});
         return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
     }
 
+    // 4. حماية الحروف الكبيرة (Caps Limit)
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
         if (letters.length > 5) {
@@ -266,19 +277,39 @@ client.on('messageCreate', async message => {
         }
     }
 
+    // 5. نظام الحماية من السبام السريع وتنبيه الإداريين
     if (features.automod) {
         if (!userMessageMap.has(message.author.id)) {
             userMessageMap.set(message.author.id, { count: 1, lastMessageTime: Date.now() });
         } else {
             const userData = userMessageMap.get(message.author.id);
             const difference = Date.now() - userData.lastMessageTime;
-            if (difference < 2500) {
+            if (difference < SPAM_INTERVAL) {
                 userData.count++;
                 userData.lastMessageTime = Date.now();
-                if (userData.count >= 5) {
-                    await message.delete().catch(() => {});
-                    await message.member.timeout(30 * 1000, 'Spamming messages too fast').catch(() => {});
-                    return message.channel.send(`⚠️ ${message.author}, توقف عن إرسال الرسائل بسرعة مفرطة (Anti-Spam Triggered)!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+                if (userData.count >= SPAM_LIMIT) {
+                    try {
+                        await message.delete();
+                    } catch (e) {}
+
+                    try {
+                        const warningMsg = await message.channel.send(`${message.author.mention || message.author} **توقف عن إرسال الرسائل بسرعة (سبام)!** ⚠️`);
+                        setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
+                    } catch (e) {}
+
+                    // إرسال تنبيه لروم الإداريين المخصصة بخصوص الشخص الذي يسبام
+                    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID) || client.channels.cache.get(ADMIN_CHANNEL_ID);
+                    if (adminChannel) {
+                        await adminChannel.send(
+                            `🚨 **تنبيه سبام جديد!**\n` +
+                            `👤 **اسم العضو:** ${message.author.tag} (ID: \`${message.author.id}\`)\n` +
+                            `📍 **مكان المخالفة:** ${message.channel}\n` +
+                            `🛠️ **الحالة:** يقوم بإرسال رسائل متكررة وسريعة، يرجى التدخل واتخاذ الإجراء اللازم (باند/حظر).`
+                        ).catch(() => {});
+                    }
+
+                    userData.count = 0;
+                    return;
                 }
             } else {
                 userData.count = 1;
@@ -286,7 +317,10 @@ client.on('messageCreate', async message => {
             }
         }
     }
+
+    await client.process_commands?.(message);
 });
+// ==========================================================================
 
 client.on('guildMemberAdd', member => {
     const config = serverConfigs.get(member.guild.id);
