@@ -237,7 +237,7 @@ client.on('messageCreate', async message => {
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
-    // 1. فلترة الكلمات الممنوحة (Bad Words)
+    // 1. فلترة الكلمات الممنوعة (Bad Words)
     if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
         try {
             await message.delete();
@@ -293,7 +293,7 @@ client.on('messageCreate', async message => {
                     } catch (e) {}
 
                     try {
-                        const warningMsg = await message.channel.send(`${message.author} **توقف عن إرسال الرسائل بسرعة (سبام)!** ⚠️`);
+                        const warningMsg = await message.channel.send(`${message.author.mention || message.author} **توقف عن إرسال الرسائل بسرعة (سبام)!** ⚠️`);
                         setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
                     } catch (e) {}
 
@@ -1270,7 +1270,7 @@ client.on('interactionCreate', async interaction => {
                 ephemeral: true 
             });
         }
-        else if (commandName::setnews || commandName === 'setnews') {
+        else if (commandName === 'setnews') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
                 return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
             
