@@ -181,7 +181,6 @@ const commands = [
     new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
-    new SlashCommandBuilder().setName('Racingbot').setDescription(' يشوف لو بوت الاخبار  شغال ام لا Racingأخبار')
     new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard')
 ].map(cmd => cmd.toJSON());
 
@@ -1107,8 +1106,8 @@ client.on('interactionCreate', async interaction => {
             const embed = new EmbedBuilder()
                 .setTitle('📊 إحصائيات كلان RKS•ＰＯＷＥＲ')
                 .addFields(
-                    { name: '🏆 ترتيب الكلان', value: 'Top 2 In Algeria (Elite Clan)', inline: true },
-                    { name: '👥 عدد الأعضاء النشطين', value: ' 32/40 ', inline: true },
+                    { name: '🏆 ترتيب الكلان', value: 'Top 10 (Elite Clan)', inline: true },
+                    { name: '👥 عدد الأعضاء النشطين', value: '50 / 50', inline: true },
                     { name: '⚡ مجموع نقاط الكلان', value: '1,450,200 XP', inline: false }
                 )
                 .setColor('#FFD700')
