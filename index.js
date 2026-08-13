@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Collection } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -19,6 +19,36 @@ const client = new Client({
 const guildSettings = new Map();
 const serverFeatures = new Map();
 const guildClubTimers = new Map();
+const serverConfigs = new Map(); // Carl-gg style advanced server sections storage
+
+// Default configuration including all advanced sections (Settings, Discovery, Premium, Moderation, Roles, Custom Commands, Notifications, Utility)
+function getDefaultConfig(guildId) {
+    return {
+        guildId,
+        settings: { prefix: "!", language: "en" },
+        serverDiscovery: { enabled: false, description: "" },
+        premium: { active: false, tier: 0 },
+        moderation: {
+            antiSpam: true,
+            antiLink: false,
+            badWords: ["badword1", "badword2"],
+            modLogChannel: null
+        },
+        roles: {
+            autorole: null,
+            reactionRoles: []
+        },
+        customCommands: [],
+        notifications: {
+            welcomeChannel: null,
+            welcomeMessage: "Welcome {user} to RKS POWER!",
+            twitchAnnounceChannel: null
+        },
+        utility: {
+            embedColor: "#FFD700"
+        }
+    };
+}
 
 function getGuildFeatures(guildId) {
     if (!serverFeatures.has(guildId)) {
@@ -199,6 +229,16 @@ const userMessageMap = new Map();
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     const features = getGuildFeatures(message.guild.id);
+    const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
+
+    // Bad words censoring from advanced settings
+    if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
+        try {
+            await message.delete();
+            message.channel.send(`${message.author}, your message was deleted because it contained a restricted word.`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
+        } catch (e) {}
+        return;
+    }
 
     if (features.attachmentspam && message.attachments.size > 0) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
@@ -250,6 +290,24 @@ client.on('messageCreate', async message => {
     }
 });
 
+// Handling member join for Autorole and Welcome messages
+client.on('guildMemberAdd', member => {
+    const config = serverConfigs.get(member.guild.id);
+    if (!config) return;
+
+    if (config.notifications.welcomeChannel) {
+        const channel = member.guild.channels.cache.get(config.notifications.welcomeChannel);
+        if (channel) {
+            const welcomeText = config.notifications.welcomeMessage.replace('{user}', `<@${member.id}>`);
+            channel.send(welcomeText).catch(() => {});
+        }
+    }
+
+    if (config.roles.autorole) {
+        member.roles.add(config.roles.autorole).catch(err => console.log("Failed to assign autorole:", err));
+    }
+});
+
 app.post('/control/:guildId/commands/save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
@@ -275,6 +333,42 @@ app.post('/control/:guildId/racing/save', (req, res) => {
     guildSettings.set(guildId, settings);
     
     res.redirect(`/control/${guildId}/racing?saved=true`);
+});
+
+// Advanced Carl-gg style general config save handler
+app.post('/control/:guildId/advanced-save', (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/login');
+    const guildId = req.params.guildId;
+    const body = req.body;
+
+    if (!serverConfigs.has(guildId)) {
+        serverConfigs.set(guildId, getDefaultConfig(guildId));
+    }
+    const config = serverConfigs.get(guildId);
+
+    config.settings.prefix = body.prefix || "!";
+    config.settings.language = body.language || "en";
+    
+    config.serverDiscovery.enabled = body.discoveryEnabled === 'on';
+    config.serverDiscovery.description = body.discoveryDesc || "";
+
+    config.moderation.antiSpam = body.antiSpam === 'on';
+    config.moderation.antiLink = body.antiLink === 'on';
+    config.moderation.badWords = body.badWords ? body.badWords.split(',').map(w => w.trim()) : [];
+
+    config.roles.autorole = body.autorole || null;
+
+    if (body.newCustomCommand && body.newCustomCommand.includes('|')) {
+        const [trigger, response] = body.newCustomCommand.split('|').map(s => s.trim());
+        config.customCommands.push({ trigger, response });
+    }
+
+    config.notifications.welcomeChannel = body.welcomeChannel || null;
+    config.notifications.welcomeMessage = body.welcomeMessage || "";
+    config.utility.embedColor = body.embedColor || "#FFD700";
+
+    serverConfigs.set(guildId, config);
+    res.redirect(`/control/${guildId}/settings?saved=true`);
 });
 
 const rksThemeStyle = `
@@ -389,7 +483,7 @@ const rksThemeStyle = `
         border: 1px solid rgba(255, 215, 0, 0.08);
         text-align: right;
     }
-    select, input {
+    select, input, textarea {
         width: 100%;
         padding: 12px;
         background: rgba(0, 0, 0, 0.5);
@@ -401,7 +495,7 @@ const rksThemeStyle = `
         outline: none;
         transition: 0.2s;
     }
-    select:focus, input:focus {
+    select:focus, input:focus, textarea:focus {
         border-color: #FFD700;
         box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
     }
@@ -478,6 +572,11 @@ app.get('/control/:guildId/:section', (req, res) => {
     const section = req.params.section;
     const currentSettings = guildSettings.get(guild.id) || {};
     const features = getGuildFeatures(guild.id);
+
+    if (!serverConfigs.has(guild.id)) {
+        serverConfigs.set(guild.id, getDefaultConfig(guild.id));
+    }
+    const advConfig = serverConfigs.get(guild.id);
 
     let channelsList = '';
     guild.channels.cache.filter(c => c.type === 0).forEach(c => {
@@ -643,17 +742,88 @@ app.get('/control/:guildId/:section', (req, res) => {
             </div>
             <div class="section-box" style="font-size:13.5px;">
                 <p>👥 عدد رتب السيرفر: <strong style="color:#FFD700;">${guild.roles.cache.size}</strong></p>
+                <label style="margin-top:15px; display:block; color:#FFD700; font-weight:bold;">Autorole ID (Role assigned on join):</label>
+                <input type="text" value="${advConfig.roles.autorole || ''}" disabled style="background: rgba(0,0,0,0.2);">
             </div>
         `;
     } else if (section === 'settings') {
+        const savedAlert = req.query.saved ? '<div style="color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;">✅ تم حفظ جميع الإعدادات المتقدمة بنجاح!</div>' : '';
         sectionContent = `
             <div style="margin-bottom:20px;">
-                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">🔧 الإعدادات والهوية</h3>
-                <p style="color:#b9bbbe; font-size:13px;">تخصيص إعدادات البوت العامة وهوية السيرفر.</p>
+                <h3 style="color:#FFD700; margin-bottom:5px; font-size:20px;">⚙️ الإعدادات المتقدمة (Settings & Carl-gg Style)</h3>
+                <p style="color:#b9bbbe; font-size:13px;">لوحة تحكم متكاملة تشمل (Settings, Server Discovery, Premium, Moderation, Roles, Custom Commands, Notifications, Utility).</p>
             </div>
-            <div class="section-box" style="font-size:13.5px;">
-                <p>⭐ اسم السيرفر: <strong style="color:#FFD700;">${guild.name}</strong></p>
-            </div>
+            ${savedAlert}
+            <form action="/control/${guild.id}/advanced-save" method="POST">
+                
+                <!-- 1. SETTINGS -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">⚙️ إعدادات البت الأساسية</h3>
+                    <label>Command Prefix:</label>
+                    <input type="text" name="prefix" value="${advConfig.settings.prefix}">
+                    <label>Language:</label>
+                    <select name="language">
+                        <option value="en" ${advConfig.settings.language === 'en' ? 'selected' : ''}>English</option>
+                        <option value="ar" ${advConfig.settings.language === 'ar' ? 'selected' : ''}>Arabic (العربية)</option>
+                    </select>
+                </div>
+
+                <!-- 2. SERVER DISCOVERY -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🌐 Server Discovery</h3>
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" name="discoveryEnabled" ${advConfig.serverDiscovery.enabled ? 'checked' : ''} style="width:auto;"> Enable Public Discovery</label>
+                    <label style="margin-top:10px;">Server Description:</label>
+                    <textarea name="discoveryDesc">${advConfig.serverDiscovery.description}</textarea>
+                </div>
+
+                <!-- 3. PREMIUM -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">👑 Premium Status</h3>
+                    <p>Status: <strong>${advConfig.premium.active ? 'Active Tier ' + advConfig.premium.tier : 'Free Tier (ارتقِ بمميزات سيرفرك)'}</strong></p>
+                </div>
+
+                <!-- 4. MODERATION (Advanced Censor/Spam) -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🛡️ Moderation & Bad Words</h3>
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" name="antiSpam" ${advConfig.moderation.antiSpam ? 'checked' : ''} style="width:auto;"> Enable Anti-Spam</label>
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:8px;"><input type="checkbox" name="antiLink" ${advConfig.moderation.antiLink ? 'checked' : ''} style="width:auto;"> Enable Anti-Link</label>
+                    <label style="margin-top:10px;">Censored Bad Words (مفصولة بفاصلة):</label>
+                    <input type="text" name="badWords" value="${advConfig.moderation.badWords.join(', ')}">
+                </div>
+
+                <!-- 5. ROLES -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🎭 Roles Management</h3>
+                    <label>Autorole (Role ID assigned on join):</label>
+                    <input type="text" name="autorole" value="${advConfig.roles.autorole || ''}">
+                </div>
+
+                <!-- 6. CUSTOM COMMANDS -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🛠️ Custom Commands</h3>
+                    <p style="font-size:12.5px; color:#b9bbbe;">الأوامر المخصصة الحالية: ${advConfig.customCommands.length} أمر</p>
+                    <label>Add Custom Command (الصيغة: trigger | response):</label>
+                    <input type="text" name="newCustomCommand" placeholder="e.g. !socials | Follow our YouTube channel!">
+                </div>
+
+                <!-- 7. NOTIFICATIONS -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🔔 Notifications (Welcome)</h3>
+                    <label>Welcome Channel ID:</label>
+                    <input type="text" name="welcomeChannel" value="${advConfig.notifications.welcomeChannel || ''}">
+                    <label style="margin-top:10px;">Welcome Message Template:</label>
+                    <input type="text" name="welcomeMessage" value="${advConfig.notifications.welcomeMessage}">
+                </div>
+
+                <!-- 8. UTILITY -->
+                <div class="section-box">
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🧰 Utility</h3>
+                    <label>Embed Theme Color (Hex):</label>
+                    <input type="text" name="embedColor" value="${advConfig.utility.embedColor}">
+                </div>
+
+                <button type="submit" class="btn-gold" style="width:100%; margin-top:20px;">حفظ جميع الإعدادات المتقدمة 🚀</button>
+            </form>
         `;
     } else {
         sectionContent = `
@@ -681,7 +851,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <h3>مركز قيادة ROCKS</h3>
                 
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Automod</span><span class="badge-new" style="background:#23a55a; color:white;">تحكم</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Automod</span><span class="badge-new" style="background:#23a55a; color:white;">حماية</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/libcommands" class="nav-item ${section === 'libcommands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 مهام الكلان</span><span class="badge-new" style="background:#FFD700; color:#0b0d14;">كلان</span></a></div>
@@ -689,7 +859,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <div class="nav-group"><a href="/control/${guild.id}/events" class="nav-item ${section === 'events' ? 'active' : ''}"><span>📅 الفعاليات والسباقات</span><span class="badge-new" style="background:#ea4335; color:white;">دمج</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/moderation" class="nav-item ${section === 'moderation' ? 'active' : ''}"><span>🛡️ الاعتدال والحماية</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/roles" class="nav-item ${section === 'roles' ? 'active' : ''}"><span>👥 الأدوار والصلاحيات</span></a></div>
-                <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🔧 الإعدادات والهوية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/settings" class="nav-item ${section === 'settings' ? 'active' : ''}"><span>🔧 الإعدادات المتقدمة</span><span class="badge-new" style="background:#FFD700; color:#0b0d14;">Carl</span></a></div>
 
                 <div style="margin-top: auto; padding-top: 15px;">
                     <a href="/dashboard" class="nav-item" style="background: rgba(255,215,0,0.06); color: #FFD700; justify-content: center; font-weight:bold; border: 1px solid rgba(255,215,0,0.2);">
@@ -918,7 +1088,7 @@ client.on('interactionCreate', async interaction => {
                 const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
                 const data = await response.json();
 
-                let answerText = data.AbstractText || data.RelatedTopics?.[0]?.Text || data.Answer;
+                let answerText = data.AbstractText || data.RelatedTopics?.[0]?.Text;
 
                 if (!answerText) {
                     answerText = `عذراً، لم أتمكن من العثور على ملخص مباشر لـ "${query}"، حاول كتابة السؤال بصيغة أخرى.`;
@@ -929,10 +1099,6 @@ client.on('interactionCreate', async interaction => {
                     .setDescription(answerText)
                     .setColor('#FFD700')
                     .setTimestamp();
-
-                if (data.AbstractURL) {
-                    embed.addFields({ name: '🔗 للمزيد من التفاصيل:', value: data.AbstractURL });
-                }
 
                 await interaction.editReply({ embeds: [embed] });
             } catch (error) {
