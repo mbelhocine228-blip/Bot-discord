@@ -19,9 +19,8 @@ const client = new Client({
 const guildSettings = new Map();
 const serverFeatures = new Map();
 const guildClubTimers = new Map();
-const serverConfigs = new Map(); // Carl-gg style advanced server sections storage
+const serverConfigs = new Map();
 
-// Default configuration including all advanced sections (Settings, Discovery, Premium, Moderation, Roles, Custom Commands, Notifications, Utility)
 function getDefaultConfig(guildId) {
     return {
         guildId,
@@ -182,6 +181,7 @@ const commands = [
     new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
+    new SlashCommandBuilder().setName('Racingbot').setDescription(' يشوف لو بوت الاخبار  شغال ام لا Racingأخبار')
     new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard')
 ].map(cmd => cmd.toJSON());
 
@@ -231,7 +231,6 @@ client.on('messageCreate', async message => {
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
-    // Bad words censoring from advanced settings
     if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
         try {
             await message.delete();
@@ -290,7 +289,6 @@ client.on('messageCreate', async message => {
     }
 });
 
-// Handling member join for Autorole and Welcome messages
 client.on('guildMemberAdd', member => {
     const config = serverConfigs.get(member.guild.id);
     if (!config) return;
@@ -335,7 +333,6 @@ app.post('/control/:guildId/racing/save', (req, res) => {
     res.redirect(`/control/${guildId}/racing?saved=true`);
 });
 
-// Advanced Carl-gg style general config save handler
 app.post('/control/:guildId/advanced-save', (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
@@ -756,9 +753,8 @@ app.get('/control/:guildId/:section', (req, res) => {
             ${savedAlert}
             <form action="/control/${guild.id}/advanced-save" method="POST">
                 
-                <!-- 1. SETTINGS -->
                 <div class="section-box">
-                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">⚙️ إعدادات البت الأساسية</h3>
+                    <h3 style="color:#FFD700; font-size:16px; margin-top:0;">⚙️ إعدادات البوت الأساسية</h3>
                     <label>Command Prefix:</label>
                     <input type="text" name="prefix" value="${advConfig.settings.prefix}">
                     <label>Language:</label>
@@ -768,7 +764,6 @@ app.get('/control/:guildId/:section', (req, res) => {
                     </select>
                 </div>
 
-                <!-- 2. SERVER DISCOVERY -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🌐 Server Discovery</h3>
                     <label style="display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" name="discoveryEnabled" ${advConfig.serverDiscovery.enabled ? 'checked' : ''} style="width:auto;"> Enable Public Discovery</label>
@@ -776,13 +771,11 @@ app.get('/control/:guildId/:section', (req, res) => {
                     <textarea name="discoveryDesc">${advConfig.serverDiscovery.description}</textarea>
                 </div>
 
-                <!-- 3. PREMIUM -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">👑 Premium Status</h3>
                     <p>Status: <strong>${advConfig.premium.active ? 'Active Tier ' + advConfig.premium.tier : 'Free Tier (ارتقِ بمميزات سيرفرك)'}</strong></p>
                 </div>
 
-                <!-- 4. MODERATION (Advanced Censor/Spam) -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🛡️ Moderation & Bad Words</h3>
                     <label style="display:flex; align-items:center; gap:10px; cursor:pointer;"><input type="checkbox" name="antiSpam" ${advConfig.moderation.antiSpam ? 'checked' : ''} style="width:auto;"> Enable Anti-Spam</label>
@@ -791,14 +784,12 @@ app.get('/control/:guildId/:section', (req, res) => {
                     <input type="text" name="badWords" value="${advConfig.moderation.badWords.join(', ')}">
                 </div>
 
-                <!-- 5. ROLES -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🎭 Roles Management</h3>
                     <label>Autorole (Role ID assigned on join):</label>
                     <input type="text" name="autorole" value="${advConfig.roles.autorole || ''}">
                 </div>
 
-                <!-- 6. CUSTOM COMMANDS -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🛠️ Custom Commands</h3>
                     <p style="font-size:12.5px; color:#b9bbbe;">الأوامر المخصصة الحالية: ${advConfig.customCommands.length} أمر</p>
@@ -806,7 +797,6 @@ app.get('/control/:guildId/:section', (req, res) => {
                     <input type="text" name="newCustomCommand" placeholder="e.g. !socials | Follow our YouTube channel!">
                 </div>
 
-                <!-- 7. NOTIFICATIONS -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🔔 Notifications (Welcome)</h3>
                     <label>Welcome Channel ID:</label>
@@ -815,7 +805,6 @@ app.get('/control/:guildId/:section', (req, res) => {
                     <input type="text" name="welcomeMessage" value="${advConfig.notifications.welcomeMessage}">
                 </div>
 
-                <!-- 8. UTILITY -->
                 <div class="section-box">
                     <h3 style="color:#FFD700; font-size:16px; margin-top:0;">🧰 Utility</h3>
                     <label>Embed Theme Color (Hex):</label>
@@ -1118,8 +1107,8 @@ client.on('interactionCreate', async interaction => {
             const embed = new EmbedBuilder()
                 .setTitle('📊 إحصائيات كلان RKS•ＰＯＷＥＲ')
                 .addFields(
-                    { name: '🏆 ترتيب الكلان', value: 'Top 10 (Elite Clan)', inline: true },
-                    { name: '👥 عدد الأعضاء النشطين', value: '50 / 50', inline: true },
+                    { name: '🏆 ترتيب الكلان', value: 'Top 2 In Algeria (Elite Clan)', inline: true },
+                    { name: '👥 عدد الأعضاء النشطين', value: ' 32/40 ', inline: true },
                     { name: '⚡ مجموع نقاط الكلان', value: '1,450,200 XP', inline: false }
                 )
                 .setColor('#FFD700')
