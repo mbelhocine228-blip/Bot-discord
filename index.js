@@ -131,7 +131,7 @@ const botCommandsList = [
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
     { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
     { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
-    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت' },
+    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
