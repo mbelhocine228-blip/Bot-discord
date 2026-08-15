@@ -21,11 +21,11 @@ const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
 
-// ==================== إعدادات نظام السبام المتقدم ====================
+// ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
 const SPAM_LIMIT = 5;         // عدد الرسائل القصوى المسموحة
 const SPAM_INTERVAL = 5000;   // خلال كم مللي ثانية (5 ثوانٍ)
-const ADMIN_CHANNEL_ID = '000000000000000000'; // استبدل الأصفار بـ آيدي روم الإداريين الخاصة بك
-const userMessageMap = new Map();
+const ADMIN_CHANNEL_ID = '1527797722122555475'; // آيدي روم الإداريين المخصص
+const spamTracker = new Map(); // خريطة متابعة السبام والتحذيرات المتقدمة
 // ===================================================================
 
 function getDefaultConfig(guildId) {
@@ -230,7 +230,7 @@ client.once('ready', async () => {
     }, 60 * 60 * 1000);
 });
 
-// ==================== معالج الرسائل ونظام الحماية المدمج ====================
+// ==================== معالج الرسائل ونظام الحماية المدمج المطور ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     
@@ -254,14 +254,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 3. فلترة الكلمات الإضافية (Censor)
-    const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
-    if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
-        await message.delete().catch(() => {});
-        return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
-    }
-
-    // 4. حماية الحروف الكبيرة (Caps Limit)
+    // 3. حماية الحروف الكبيرة (Caps Limit)
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
         if (letters.length > 5) {
@@ -277,48 +270,71 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 5. نظام الحماية من السبام السريع وتنبيه الإداريين
+    // 4. نظام الحماية الذكي المطور للسبام وتنبيه الإداريين وتطبيق الميوت التلقائي
     if (features.automod) {
-        if (!userMessageMap.has(message.author.id)) {
-            userMessageMap.set(message.author.id, { count: 1, lastMessageTime: Date.now() });
+        const userId = message.author.id;
+        const currentTime = Date.now();
+
+        if (!spamTracker.has(userId)) {
+            spamTracker.set(userId, { count: 1, firstMessageTimestamp: currentTime, warnings: 0 });
         } else {
-            const userData = userMessageMap.get(message.author.id);
-            const difference = Date.now() - userData.lastMessageTime;
-            if (difference < SPAM_INTERVAL) {
+            const userData = spamTracker.get(userId);
+            
+            if (currentTime - userData.firstMessageTimestamp < SPAM_INTERVAL) {
                 userData.count++;
-                userData.lastMessageTime = Date.now();
-                if (userData.count >= SPAM_LIMIT) {
+                
+                if (userData.count > SPAM_LIMIT) {
+                    userData.warnings++;
+                    const spamType = "إرسال رسائل متتالية بسرعة فائقة (Flood / Spam)";
+                    
                     try {
-                        await message.delete();
-                    } catch (e) {}
-
-                    try {
-                        const warningMsg = await message.channel.send(`${message.author.mention || message.author} **توقف عن إرسال الرسائل بسرعة (سبام)!** ⚠️`);
-                        setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
-                    } catch (e) {}
-
-                    // إرسال تنبيه لروم الإداريين المخصصة بخصوص الشخص الذي يسبام
-                    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID) || client.channels.cache.get(ADMIN_CHANNEL_ID);
-                    if (adminChannel) {
-                        await adminChannel.send(
-                            `🚨 **تنبيه سبام جديد!**\n` +
-                            `👤 **اسم العضو:** ${message.author.tag} (ID: \`${message.author.id}\`)\n` +
-                            `📍 **مكان المخالفة:** ${message.channel}\n` +
-                            `🛠️ **الحالة:** يقوم بإرسال رسائل متكررة وسريعة، يرجى التدخل واتخاذ الإجراء اللازم (باند/حظر).`
-                        ).catch(() => {});
+                        await message.author.send(`⚠️ **تنبيه:** لقد قمت بإرسال رسائل بسرعة كبيرة وتم اعتبارها سبام في سيرفر **${message.guild.name}**. يرجى التوقف عن ذلك تفادياً للعقوبة.`);
+                    } catch (err) {
+                        const warnMsg = await message.channel.send(`${message.author}, ⚠️ تنبيه: يرجى التوقف عن السبام!`);
+                        setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
                     }
 
+                    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID) || client.channels.cache.get(ADMIN_CHANNEL_ID);
+                    if (adminChannel) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#ff0000')
+                            .setTitle('🚨 تنبيه سبام مكتشف!')
+                            .addFields(
+                                { name: '👤 الشخص المخالف:', value: `${message.author.tag} (${message.author.id})`, inline: true },
+                                { name: '📍 الروم:', value: `${message.channel}`, inline: true },
+                                { name: '🔍 نوع السبام:', value: spamType, inline: false },
+                                { name: '⚠️ عدد التحذيرات الحالية:', value: `${userData.warnings}`, inline: true }
+                            )
+                            .setTimestamp();
+
+                        await adminChannel.send({ embeds: [embed] }).catch(() => {});
+                    }
+
+                    if (userData.warnings >= 3) {
+                        try {
+                            const member = await message.guild.members.fetch(userId);
+                            await member.timeout(5 * 60 * 1000, 'تكرار مخالفة السبام');
+                            
+                            if (adminChannel) {
+                                await adminChannel.send(`🔇 تم تطبيق عقوبة **الميوت (Timeout)** لمدة 5 دقائق على العضو ${message.author.tag} لتكراره السبام.`);
+                            }
+                            userData.warnings = 0;
+                        } catch (error) {
+                            console.error('فشل في تطبيق الميوت:', error);
+                        }
+                    }
+
+                    await message.delete().catch(() => {});
                     userData.count = 0;
+                    userData.firstMessageTimestamp = currentTime;
                     return;
                 }
             } else {
                 userData.count = 1;
-                userData.lastMessageTime = Date.now();
+                userData.firstMessageTimestamp = currentTime;
             }
         }
     }
-
-    await client.process_commands?.(message);
 });
 // ==========================================================================
 
@@ -580,7 +596,7 @@ const rksThemeStyle = `
 
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="google-site-verification" content="yhkqoDefQywbFdV7Zc8yQR-VkmEJ9aue7RU7tP4a4rs" /><title>مركز قيادة ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card" style="text-align: center;"><h2 style="color: #FFD700; margin-bottom: 10px; font-size: 26px;">ROCKS COMMAND CENTER</h2><p style="color: #b9bbbe; margin-bottom: 25px; font-size: 14px;">مركز القيادة المطور لإدارة السيرفرات وأخبار الألعاب باحترافية تامة</p><a href="/login" class="btn-gold">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 20px;"><a href="${INVITE_URL}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 13px;">+ إضافة البوت لسيرفرك مباشرة</a></div></div></body></html>`);
+    res.send(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>مركز قيادة ROCKS</title><style>body { justify-content: center; align-items: center; } ${rksThemeStyle}</style></head><body><div class="glass-card" style="text-align: center;"><h2 style="color: #FFD700; margin-bottom: 10px; font-size: 26px;">ROCKS COMMAND CENTER</h2><p style="color: #b9bbbe; margin-bottom: 25px; font-size: 14px;">مركز القيادة المطور لإدارة السيرفرات وأخبار الألعاب باحترافية تامة</p><a href="/login" class="btn-gold">تسجيل الدخول عبر ديسكورد 🎮</a><div style="margin-top: 20px;"><a href="${INVITE_URL}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 13px;">+ إضافة البوت لسيرفرك مباشرة</a></div></div></body></html>`);
 });
 
 app.get('/dashboard', (req, res) => {
