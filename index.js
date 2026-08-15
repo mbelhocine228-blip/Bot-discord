@@ -117,7 +117,7 @@ const botCommandsList = [
     { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
     { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
     { name: 'say', desc: 'تكرار الكلام عبر البوت' },
-    { name: 'announcement', desc: 'إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص' },
+    { name: 'announcement', desc: 'إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص' },
     { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
     { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
     { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
@@ -156,16 +156,20 @@ const commands = [
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder()
         .setName('announcement')
-        .setDescription('إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص')
+        .setDescription('إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addChannelOption(option =>
             option.setName('channel')
                 .setDescription('اختر الروم المراد إرسال الإعلان فيه')
                 .addChannelTypes(ChannelType.GuildText)
                 .setRequired(true))
+        .addStringOption(option =>
+            option.setName('message')
+                .setDescription('اكتب نص الإعلان المراد إرساله')
+                .setRequired(true))
         .addAttachmentOption(option =>
             option.setName('image')
-                .setDescription('اختر صورة الإعلان المراد إرفاقها')
+                .setDescription('اختر صورة الإعلان المراد إرفاقها (اختياري)')
                 .setRequired(false)),
     new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
     new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
@@ -1238,20 +1242,14 @@ client.on('interactionCreate', async interaction => {
             await interaction.deferReply({ ephemeral: true });
 
             const targetChannel = options.getChannel('channel');
+            const customMessage = options.getString('message');
             const imageAttachment = options.getAttachment('image');
 
             const embed = new EmbedBuilder()
-                .setColor('#1e2124')
+                .setColor('#FFD700')
                 .setTitle('🔥 إعلان رسمي من إدارة كلان 🏎️ RKS POWER 🔥')
-                .setDescription(
-                    '🏆 **Join RKS POWER Club!** 🏆\n\n' +
-                    'يا شباب، فعاليات ومهمات الكلان شعلت نار! 🔥 شدُو الهمة وخلونا نرفع اسم **RKS POWER** فوق في الترتيب 🏆\n\n' +
-                    '📍 **المهام الحالية:**\n' +
-                    '• **مهمات السباقات اليومية:** لا تفوتوا أي محاولة لجمع النقاط لصالح الكلان! 🏎️💨\n' +
-                    '• **فعاليات الكلان (Endurance & Duel):** شاركوا الآن وسجلوا حضوركم بقوة. ⏳ ⚡\n\n' +
-                    'كل نقطة تحسب وتفرق معنا في لفل الكلان والترتيب العام.\n' +
-                    'أدخلوا اللعبة الآن وخلصوا مهماتكم! 💪'
-                );
+                .setDescription(customMessage)
+                .setTimestamp();
 
             if (imageAttachment) {
                 embed.setImage(imageAttachment.url);
