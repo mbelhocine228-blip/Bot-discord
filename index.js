@@ -22,10 +22,10 @@ const guildClubTimers = new Map();
 const serverConfigs = new Map();
 
 // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
-const SPAM_LIMIT = 5;         // عدد الرسائل القصوى المسموحة
-const SPAM_INTERVAL = 5000;   // خلال كم مللي ثانية (5 ثوانٍ)
-const ADMIN_CHANNEL_ID = '1527797722122555475'; // آيدي روم الإداريين المخصص
-const spamTracker = new Map(); // خريطة متابعة السبام والتحذيرات المتقدمة
+const SPAM_LIMIT = 5;         
+const SPAM_INTERVAL = 5000;   
+const ADMIN_CHANNEL_ID = '1527797722122555475'; 
+const spamTracker = new Map(); 
 // ===================================================================
 
 function getDefaultConfig(guildId) {
@@ -248,7 +248,6 @@ client.on('messageCreate', async message => {
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
-    // 1. فلترة الكلمات الممنوعة (Bad Words)
     if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
         try {
             await message.delete();
@@ -257,7 +256,6 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2. منع سبام الملفات والصور (Attachment Spam)
     if (features.attachmentspam && message.attachments.size > 0) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
             await message.delete().catch(() => {});
@@ -265,7 +263,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 3. حماية الحروف الكبيرة (Caps Limit)
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
         if (letters.length > 5) {
@@ -281,7 +278,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 4. نظام الحماية الذكي المطور للسبام وتنبيه الإداريين وتطبيق الميوت التلقائي
     if (features.automod) {
         const userId = message.author.id;
         const currentTime = Date.now();
@@ -1190,11 +1186,14 @@ client.on('interactionCreate', async interaction => {
         }
         else if (commandName === 'applysetup') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                .setTimestamp();
+                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            
             const embed = new EmbedBuilder()
                 .setTitle('📝 نموذج التقديم للانضمام إلى كلان RKS POWER')
                 .setDescription('تبي تنضم لكلان RKS؟ شروطنا واضحة:\n1. التفاعل المستمر وحضور مهام الكلان (Endurance & Duel).\n2. احترام الأعضاء والإدارة.\n3. اللعب النظيف والاحترافي في Racing Master.\n\nتواصل مع الإدارة أو افتح تذكرة للتقديم!')
-                .setColor('#FFD700');
+                .setColor('#FFD700')
+                .setTimestamp();
+            
             await channel.send({ embeds: [embed] });
             await interaction.reply({ content: '✅ تم إرسال نموذج التقديم بنجاح!', ephemeral: true });
         }
@@ -1217,7 +1216,7 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
 
             const title = options.getString('title');
-            const durationInput = options.getString('duration'); // الصيغة المفترضة: ساعات:دقائق:ثواني مثل 0:1:30 أو 1:30:50
+            const durationInput = options.getString('duration'); 
 
             const parts = durationInput.split(':').map(Number);
             let totalSeconds = 0;
