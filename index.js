@@ -133,6 +133,7 @@ const botCommandsList = [
     { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
     { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
+    { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
     { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
@@ -186,6 +187,12 @@ const commands = [
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
     new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة سباق أو فعالية جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('event')
+        .setDescription('بدء مسابقة مع عد تنازلي حي للوقت (مثال: 0:01:30)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
+        .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
     new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -771,7 +778,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <p style="color:#b9bbbe; font-size:13px;">جدولة وتنظيم سباقات وفعاليات كلان RKS.</p>
             </div>
             <div class="section-box" style="font-size:13.5px;">
-                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة.</p>
+                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة، أو <code style="color:#FFD700;">/event</code> لبدء مسابقة بعد تنازلي حي.</p>
             </div>
         `;
     } else if (section === 'moderation') {
@@ -1183,7 +1190,7 @@ client.on('interactionCreate', async interaction => {
         }
         else if (commandName === 'applysetup') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
-                return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+                .setTimestamp();
             const embed = new EmbedBuilder()
                 .setTitle('📝 نموذج التقديم للانضمام إلى كلان RKS POWER')
                 .setDescription('تبي تنضم لكلان RKS؟ شروطنا واضحة:\n1. التفاعل المستمر وحضور مهام الكلان (Endurance & Duel).\n2. احترام الأعضاء والإدارة.\n3. اللعب النظيف والاحترافي في Racing Master.\n\nتواصل مع الإدارة أو افتح تذكرة للتقديم!')
@@ -1204,6 +1211,64 @@ client.on('interactionCreate', async interaction => {
                 .setTimestamp();
             await channel.send({ content: '@here @everyone', embeds: [embed] });
             await interaction.reply({ content: '✅ تم جدولة الفعالية وإرسالها بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'event') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
+
+            const title = options.getString('title');
+            const durationInput = options.getString('duration'); // الصيغة المفترضة: ساعات:دقائق:ثواني مثل 0:1:30 أو 1:30:50
+
+            const parts = durationInput.split(':').map(Number);
+            let totalSeconds = 0;
+
+            if (parts.length === 3) {
+                totalSeconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+            } else if (parts.length === 2) {
+                totalSeconds = (parts[0] * 60) + parts[1];
+            } else {
+                totalSeconds = parts[0] || 60;
+            }
+
+            await interaction.reply({ content: '✅ تم بدء عداد المسابقة بنجاح!', ephemeral: true });
+
+            const formatTime = (secs) => {
+                const h = Math.floor(secs / 3600);
+                const m = Math.floor((secs % 3600) / 60);
+                const s = secs % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            };
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                .setDescription(`⏳ الوقت المتبقي لبدء المسابقة:\n# \`${formatTime(totalSeconds)}\``)
+                .setColor('#FFD700')
+                .setTimestamp();
+
+            const eventMessage = await channel.send({ content: '@here @everyone 🚨 **بدء العد التنازلي للمسابقة!**', embeds: [embed] });
+
+            const countdownInterval = setInterval(async () => {
+                totalSeconds--;
+
+                if (totalSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                    const finishedEmbed = new EmbedBuilder()
+                        .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                        .setDescription('🚀 **المسابقة الآن! انضم واشترك فوراً!** 🔥')
+                        .setColor('#23a55a')
+                        .setTimestamp();
+                    
+                    await eventMessage.edit({ content: '@here @everyone 🚨 **انتهى الوقت، المسابقة بدأت الآن!**', embeds: [finishedEmbed] }).catch(() => {});
+                } else {
+                    const updatedEmbed = new EmbedBuilder()
+                        .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                        .setDescription(`⏳ الوقت المتبقي لبدء المسابقة:\n# \`${formatTime(totalSeconds)}\``)
+                        .setColor('#FFD700')
+                        .setTimestamp();
+
+                    await eventMessage.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                }
+            }, 1000);
         }
         else if (commandName === 'rps') {
             const choice = options.getString('choice').toLowerCase();
