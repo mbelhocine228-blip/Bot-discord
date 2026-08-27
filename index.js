@@ -5,7 +5,6 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
 const { DisTube } = require('distube');
-const { SpotifyPlugin } = require('@distube/spotify');
 const { YouTubePlugin } = require('@distube/youtube-dl');
 
 const app = express();
