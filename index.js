@@ -20,6 +20,17 @@ const guildSettings = new Map();
 const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
+client.on('guildMemberAdd', async (member) => {
+    try {
+        if (member.manageable && member.id !== member.guild.ownerId) {
+            const baseName = member.user.username;
+            const newNick = `RKS • ${baseName}`.slice(0, 32);
+            await member.setNickname(newNick);
+        }
+    } catch (err) {
+        console.error(`ماقدرش يغير الاسم:`, err);
+    }
+});
 
 // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
 const SPAM_LIMIT = 5;         
@@ -260,8 +271,19 @@ client.on('messageCreate', async message => {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
             await message.delete().catch(() => {});
             return message.channel.send(`⚠️ ${message.author}, ممنوع إرسال الصور والملفات بسرعة (Attachment Spam Protected)!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
-        }
+
+            
+    }client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild) return;
+
+    // زيد الكود هنا:
+    if (message.content.includes('discord.gg/')) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`⚠️ ${message.author} ممنوع نشر الروابط هنا!`);
     }
+
+    const features = getGuildFeatures(message.g...
+
 
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
