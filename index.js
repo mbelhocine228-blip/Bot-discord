@@ -4,6 +4,13 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
+const distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    leaveOnEmpty: true,
+    leaveOnFinish: true,
+    plugins: [new SpotifyPlugin(), new YouTubePlugin()]
+});
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -1380,6 +1387,12 @@ client.on('interactionCreate', async interaction => {
         console.error(err);
         await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
     }
+});
+const distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    leaveOnEmpty: true,
+    leaveOnFinish: true,
+    plugins: [new SpotifyPlugin(), new YouTubePlugin()]
 });
 
 client.login(process.env.DISCORD_TOKEN);
