@@ -1389,8 +1389,8 @@ const distube = new DisTube(client, {
     emitNewSongOnly: true,
     leaveOnEmpty: true,
     leaveOnFinish: true,
-    plugins: [new SpotifyPlugin(), new YouTubePlugin()]
 });
+
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
