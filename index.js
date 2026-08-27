@@ -4,12 +4,9 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const distube = new DisTube(client, {
-    emitNewSongOnly: true,
-    leaveOnEmpty: true,
-    leaveOnFinish: true,
-    plugins: [new SpotifyPlugin(), new YouTubePlugin()]
-});
+const { DisTube } = require('distube');
+const { SpotifyPlugin } = require('@distube/spotify');
+const { YouTubePlugin } = require('@distube/youtube-dl');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -1394,6 +1391,47 @@ const distube = new DisTube(client, {
     leaveOnFinish: true,
     plugins: [new SpotifyPlugin(), new YouTubePlugin()]
 });
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'play') {
+        const query = interaction.options.getString('song');
+        const voiceChannel = interaction.member.voice.channel;
+
+        if (!voiceChannel) {
+            return interaction.reply({ content: '❌ لازم تكون في قناة صوتية باش تسمع الأغنية!', ephemeral: true });
+        }
+
+        await interaction.deferReply();
+        try {
+            await distube.play(voiceChannel, query, {
+                textChannel: interaction.channel,
+                member: interaction.member,
+            });
+            return interaction.followUp(`🎵 جاري تشغيل: **${query}**`);
+        } catch (e) {
+            console.error(e);
+            return interaction.followUp(`❌ صار خطأ أثناء تشغيل الأغنية!`);
+        }
+    }
+
+    if (interaction.commandName === 'stop') {
+        const voiceChannel = interaction.member.voice.channel;
+        if (!voiceChannel) {
+            return interaction.reply({ content: '❌ لازم تكون في القناة الصوتية باش توقف البوت!', ephemeral: true });
+        }
+
+        try {
+            await distube.stop(interaction.guildId);
+            return interaction.reply('⏹️ تم إيقاف الموسيقى ومغادرة القناة الصوتية.');
+        } catch (e) {
+            console.error(e);
+            return interaction.reply({ content: '❌ ما كاين حتى موسيقى خدامة حالياً!', ephemeral: true });
+        }
+    }
+});
+
 
 client.login(process.env.DISCORD_TOKEN);
 
