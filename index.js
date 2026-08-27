@@ -4,7 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { DisTube } = require('distube');
+
 
 
 
@@ -1385,12 +1385,6 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
     }
 });
-const distube = new DisTube(client, {
-    emitNewSongOnly: true,
-    leaveOnEmpty: true,
-    leaveOnFinish: true,
-});
-
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
