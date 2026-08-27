@@ -1,6 +1,9 @@
 {
   "name": "rks-dashboard-bot",
   "version": "1.0.0",
+{
+  "name": "rks-dashboard-bot",
+  "version": "1.0.0",
   "description": "Discord Bot and Web Dashboard",
   "main": "index.js",
   "engines": {
