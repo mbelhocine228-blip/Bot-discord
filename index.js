@@ -1382,12 +1382,12 @@ client.on('interactionCreate', async interaction => {
         }
     } catch (err) {
         console.error(err);
-        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر المستهدف.', ephemeral: true });
     }
-})
-    } else if (commandName === 'youtube') {
+    else if (commandName === 'youtube') {
         const query = options.getString('query');
         await interaction.deferReply();
+
         
         try {
             const searchResults = await play.search(query, { limit: 1 });
