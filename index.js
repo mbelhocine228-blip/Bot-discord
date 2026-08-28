@@ -1,12 +1,12 @@
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Collection } = require('discord.js');
+const { GoogleGenAI } = require('@google/genai');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-
-
-
+// إعداد الذكاء الاصطناعي (تأكد من وضع مفتاح GEMINI_API_KEY في متغيرات البيئة)
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const app = express();
 app.set('trust proxy', 1);
@@ -24,6 +24,7 @@ const guildSettings = new Map();
 const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
+
 client.on('guildMemberAdd', async (member) => {
     try {
         if (member.manageable && member.id !== member.guild.ownerId) {
@@ -120,6 +121,7 @@ app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
 
 const botCommandsList = [
+    { name: 'ai', desc: 'التحدث مع الذكاء الاصطناعي (Gemini AI)' },
     { name: 'ban', desc: 'حظر عضو من السيرفر' },
     { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
     { name: 'kick', desc: 'طرد عضو من السيرفر' },
@@ -158,6 +160,7 @@ const botCommandsList = [
 ];
 
 const commands = [
+    new SlashCommandBuilder().setName('ai').setDescription('التحدث مع الذكاء الاصطناعي').addStringOption(opt => opt.setName('prompt').setDescription('ما الذي تريد سؤاله للبوت؟').setRequired(true)),
     new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
     new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
     new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
@@ -222,7 +225,7 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
+        console.log('🔄 تم تسجيل جميع الأوامر ونظام الذكاء الاصطناعي والحماية بنجاح.');
     } catch (error) { console.error(error); }
 
     setInterval(() => {
@@ -260,6 +263,32 @@ client.once('ready', async () => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     
+    // دعم الرد التلقائي بالذكاء الاصطناعي إذا تم المنشن للبوت
+    if (message.mentions.has(client.user)) {
+        try {
+            await message.channel.sendTyping();
+            const promptText = message.content.replace(`<@!${client.user.id}>`, '').replace(`<@${client.user.id}>`, '').trim();
+            if (!promptText) return message.reply('أهلاً بك! كيف يمكنني مساعدتك اليوم؟');
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: promptText,
+                config: {
+                    systemInstruction: "أنت مساعد ذكي ومفيد داخل سيرفر ديسكورد خاص بكلان الألعاب RKS POWER. أجب بطريقة لطيفة وذكية وبنفس لغة المستخدم."
+                }
+            });
+
+            const replyText = response.text || 'عذراً، لم أتمكن من معالجة الطلب.';
+            if (replyText.length > 2000) {
+                return message.reply(replyText.substring(0, 1997) + '...');
+            }
+            return message.reply(replyText);
+        } catch (err) {
+            console.error('AI Error:', err);
+            return message.reply('❌ حدث خطأ أثناء الاتصال بالذكاء الاصطناعي.');
+        }
+    }
+
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
@@ -753,7 +782,7 @@ app.get('/control/:guildId/:section', (req, res) => {
             <div class="section-box" style="font-size:14px; line-height: 1.8;">
                 <p>👥 عدد أعضاء السيرفر: <strong style="color:#FFD700;">${guild.memberCount}</strong></p>
                 <p>📁 إجمالي الرومات: <strong style="color:#FFD700;">${guild.channels.cache.size}</strong></p>
-                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (38ms)</strong></p>
+                <p>🟢 حالة نظام ROCKS: <strong style="color:#23a55a;">يعمل بكفاءة تامة (مع الذكاء الاصطناعي 🤖)</strong></p>
             </div>
         `;
     } else if (section === 'missions') {
@@ -987,7 +1016,29 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, guild, channel } = interaction;
 
     try {
-        if (commandName === 'clear') {
+        if (commandName === 'ai') {
+            const prompt = options.getString('prompt');
+            await interaction.deferReply();
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    systemInstruction: "أنت مساعد ذكي ومفيد داخل سيرفر ديسكورد خاص بكلان الألعاب RKS POWER. أجب بطريقة لطيفة وذكية وبنفس لغة المستخدم."
+                }
+            });
+
+            const replyText = response.text || 'عذراً، لم أتمكن من الحصول على إجابة.';
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 إجابة الذكاء الاصطناعي (Gemini)')
+                .setDescription(replyText.length > 4000 ? replyText.substring(0, 3997) + '...' : replyText)
+                .setColor('#FFD700')
+                .setFooter({ text: `سؤال بواسطة: ${interaction.user.tag}` })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+        }
+        else if (commandName === 'clear') {
             const count = options.getInteger('count');
             if (count < 1 || count > 100) {
                 return interaction.reply({ content: '❌ يجب تحديد عدد رسائل بين 1 و 100 للحذف.', ephemeral: true });
@@ -1060,11 +1111,11 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'botinfo') {
             const embed = new EmbedBuilder()
                 .setTitle('🤖 معلومات بوت ROCKS Dashboard')
-                .setDescription('بوت احترافي مخصص لإدارة السيرفرات وأخبار لعبة Racing Master وكلان RKS POWER.')
+                .setDescription('بوت احترافي مخصص لإدارة السيرفرات وأخبار لعبة Racing Master وكلان RKS POWER (مدعوم بالذكاء الاصطناعي).')
                 .addFields(
                     { name: '⚡ سرعة الاستجابة', value: `${client.ws.ping}ms`, inline: true },
                     { name: '👥 السيرفرات', value: `${client.guilds.cache.size}`, inline: true },
-                    { name: '🛠️ الإصدار', value: 'v3.0 Pro', inline: true }
+                    { name: '🛠️ الإصدار', value: 'v3.5 AI Pro', inline: true }
                 )
                 .setColor('#FFD700')
                 .setTimestamp();
@@ -1380,6 +1431,16 @@ client.on('interactionCreate', async interaction => {
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
+    } catch (error) {
+        console.error(error);
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر.' }).catch(() => {});
+        } else {
+            await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر.', ephemeral: true }).catch(() => {});
+        }
+    }
+});
+
 client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
