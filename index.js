@@ -1380,45 +1380,7 @@ client.on('interactionCreate', async interaction => {
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
-         } catch (err) {
-        console.error(err);
-        await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر المستهدف.', ephemeral: true });
-    }
-
-    else if (commandName === 'youtube') {
-        const query = options.getString('query');
-        await interaction.deferReply();
-
-        try {
-            const searchResults = await play.search(query, { limit: 1 });
-            if (!searchResults || searchResults.length === 0) {
-                return interaction.editReply('❌ لم يتم العثور على نتائج مطابقة لبحثك في يوتيوب.');
-            }
-
-            const video = searchResults[0];
-            const embed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('📺 نتيجة البحث من يوتيوب')
-                .setDescription(`**[${video.title}](${video.url})**`)
-                .addFields(
-                    { name: '⏱️ المدة', value: video.duration || 'غير معروف', inline: true },
-                    { name: '👁️ المشاهدات', value: `${video.views || 0}`, inline: true },
-                    { name: '🔗 الرابط المباشر', value: video.url, inline: true }
-                )
-                .setThumbnail(video.thumbnails?.[0]?.url || null)
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [embed] });
-        } catch (error) {
-            console.error(error);
-            await interaction.editReply('❌ حدث خطأ أثناء البحث في يوتيوب.');
-        }
-    }
-
     
-});
-
-
 client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
