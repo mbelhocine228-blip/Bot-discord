@@ -1385,6 +1385,37 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
     }
 });
+    } else if (commandName === 'youtube') {
+        const query = options.getString('query');
+        await interaction.deferReply();
+        
+        try {
+            const searchResults = await play.search(query, { limit: 1 });
+            
+            if (!searchResults || searchResults.length === 0) {
+                return interaction.editReply('❌ لم يتم العثور على أي فيديو يطابق بحثك في يوتيوب.');
+            }
+
+            const video = searchResults[0];
+
+            const embed = new EmbedBuilder()
+                .setColor('#FF0000')
+                .setTitle('📺 نتيجة البحث من يوتيوب')
+                .setDescription(`**[${video.title}](${video.url})**`)
+                .addFields(
+                    { name: '⏱️ المدة', value: video.duration || 'غير معروفة', inline: true },
+                    { name: '👀 المشاهدات', value: video.views ? video.views.toLocaleString() : 'غير معروفة', inline: true },
+                    { name: '🔗 الرابط المباشر', value: video.url, inline: false }
+                )
+                .setThumbnail(video.thumbnails[0]?.url || null)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply('❌ حدث خطأ أثناء البحث في يوتيوب.');
+        }
+    }
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
