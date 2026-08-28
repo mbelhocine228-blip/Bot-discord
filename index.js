@@ -1380,7 +1380,44 @@ client.on('interactionCreate', async interaction => {
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
-    
+       } catch (err) {
+        console.error(err);
+        await interaction.reply({ content: '❌ حدث خطأ.', ephemeral: true });
+    }
+} // <--- تأكد أنك لا تترك قوساً غريباً هنا، ثم الصق الأوامر الجديدة بعدها:
+
+    else if (commandName === 'play') {
+        const query = options.getString('query');
+        await interaction.deferReply();
+
+        try {
+            const searchResults = await play.search(query, { limit: 1 });
+            if (!searchResults || searchResults.length === 0) {
+                return interaction.editReply('❌ لم يتم العثور على نتائج مطابقة لبحثك.');
+            }
+
+            const video = searchResults[0];
+            const embed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('🔍 نتيجة البحث')
+                .setDescription(`**[${video.title}](${video.url})**`)
+                .addFields(
+                    { name: '⏱️ المدة', value: video.duration || 'غير معروف', inline: true },
+                    { name: '👁️ المشاهدات', value: `${video.views || 0}`, inline: true }
+                )
+                .setThumbnail(video.thumbnails?.[0]?.url || null)
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply('❌ حدث خطأ أثناء تنفيذ البحث.');
+        }
+    } 
+    else if (commandName === 'stop') {
+        await interaction.reply({ content: '🛑 تم إيقاف العملية بنجاح.', ephemeral: true });
+    }
+ 
 client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
