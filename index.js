@@ -1380,34 +1380,32 @@ client.on('interactionCreate', async interaction => {
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
-    } catch (err) {
+         } catch (err) {
         console.error(err);
         await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر المستهدف.', ephemeral: true });
     }
+
     else if (commandName === 'youtube') {
         const query = options.getString('query');
         await interaction.deferReply();
 
-        
         try {
             const searchResults = await play.search(query, { limit: 1 });
-            
             if (!searchResults || searchResults.length === 0) {
-                return interaction.editReply('❌ لم يتم العثور على أي فيديو يطابق بحثك في يوتيوب.');
+                return interaction.editReply('❌ لم يتم العثور على نتائج مطابقة لبحثك في يوتيوب.');
             }
 
             const video = searchResults[0];
-
             const embed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('📺 نتيجة البحث من يوتيوب')
                 .setDescription(`**[${video.title}](${video.url})**`)
                 .addFields(
-                    { name: '⏱️ المدة', value: video.duration || 'غير معروفة', inline: true },
-                    { name: '👀 المشاهدات', value: video.views ? video.views.toLocaleString() : 'غير معروفة', inline: true },
-                    { name: '🔗 الرابط المباشر', value: video.url, inline: false }
+                    { name: '⏱️ المدة', value: video.duration || 'غير معروف', inline: true },
+                    { name: '👁️ المشاهدات', value: `${video.views || 0}`, inline: true },
+                    { name: '🔗 الرابط المباشر', value: video.url, inline: true }
                 )
-                .setThumbnail(video.thumbnails[0]?.url || null)
+                .setThumbnail(video.thumbnails?.[0]?.url || null)
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
@@ -1417,44 +1415,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    if (interaction.commandName === 'play') {
-        const query = interaction.options.getString('song');
-        const voiceChannel = interaction.member.voice.channel;
-
-        if (!voiceChannel) {
-            return interaction.reply({ content: '❌ لازم تكون في قناة صوتية باش تسمع الأغنية!', ephemeral: true });
-        }
-
-        await interaction.deferReply();
-        try {
-            await distube.play(voiceChannel, query, {
-                textChannel: interaction.channel,
-                member: interaction.member,
-            });
-            return interaction.followUp(`🎵 جاري تشغيل: **${query}**`);
-        } catch (e) {
-            console.error(e);
-            return interaction.followUp(`❌ صار خطأ أثناء تشغيل الأغنية!`);
-        }
-    }
-
-    if (interaction.commandName === 'stop') {
-        const voiceChannel = interaction.member.voice.channel;
-        if (!voiceChannel) {
-            return interaction.reply({ content: '❌ لازم تكون في القناة الصوتية باش توقف البوت!', ephemeral: true });
-        }
-
-        try {
-            await distube.stop(interaction.guildId);
-            return interaction.reply('⏹️ تم إيقاف الموسيقى ومغادرة القناة الصوتية.');
-        } catch (e) {
-            console.error(e);
-            return interaction.reply({ content: '❌ ما كاين حتى موسيقى خدامة حالياً!', ephemeral: true });
-        }
-    }
+    
 });
 
 
