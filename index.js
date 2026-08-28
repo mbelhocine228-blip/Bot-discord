@@ -1384,7 +1384,7 @@ client.on('interactionCreate', async interaction => {
         console.error(err);
         await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ هذا الأمر، تأكد أن صلاحيات البوت أعلى من العضو المستهدف.', ephemeral: true }).catch(() => {});
     }
-});
+})
     } else if (commandName === 'youtube') {
         const query = options.getString('query');
         await interaction.deferReply();
