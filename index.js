@@ -166,7 +166,7 @@ const commands = [
         .addAttachmentOption(option =>
             option.setName('image')
                 .setDescription('اختر صورة الإعلان المراد إرفاقها')
-               .setRequired(false)),
+                .setRequired(false)),
     new SlashCommandBuilder()
         .setName('room')
         .setDescription('إنشاء قناة جديدة')
