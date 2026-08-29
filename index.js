@@ -1288,7 +1288,7 @@ client.on('interactionCreate', async interaction => {
             
             await interaction.reply({ content: `✅ تم تعيين روم الأخبار والمهام التلقائي بنجاح: ${channelOpt}`, ephemeral: true });
         }
-                else if (commandName === 'ping') {
+                        else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
         }
         else if (commandName === 'room') {
