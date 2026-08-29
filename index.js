@@ -157,7 +157,9 @@ const botCommandsList = [
     { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
     { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
     { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
+    { name: 'room', desc: 'إنشاء قناة صوتية باسم مزخرف' }
 ];
+
 
 const commands = [
     new SlashCommandBuilder().setName('ai').setDescription('التحدث مع الذكاء الاصطناعي').addStringOption(opt => opt.setName('prompt').setDescription('ما الذي تريد سؤاله للبوت؟').setRequired(true)),
@@ -174,7 +176,15 @@ const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder()
-        .setName('announcement')
+    new SlashCommandBuilder()
+        .setName('room')
+        .setDescription('إنشاء قناة صوتية باسم مزخرف')
+        .addStringOption(option =>
+            option.setName('name')
+                .setDescription('اسم القناة المراد إنشاؤها')
+                .setRequired(true)),
+
+    .setName('announcement')
         .setDescription('إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addChannelOption(option =>
