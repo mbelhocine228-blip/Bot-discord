@@ -178,14 +178,7 @@ const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
      
-    new SlashCommandBuilder()
-        .setName('room')
-        .setDescription('إنشاء قناة صوتية باسم مزخرف')
-        .addStringOption(option =>
-            option.setName('name')
-                .setDescription('اسم القناة المراد إنشاؤها')
-                .setRequired(true)),
-
+    
     new SlashCommandBuilder()
         .setName('announcement')
         .setDescription('إرسال إعلان مخصص وروم مخصص')
