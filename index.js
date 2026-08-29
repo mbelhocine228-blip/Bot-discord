@@ -1288,8 +1288,34 @@ client.on('interactionCreate', async interaction => {
             
             await interaction.reply({ content: `✅ تم تعيين روم الأخبار والمهام التلقائي بنجاح: ${channelOpt}`, ephemeral: true });
         }
-        else if (commandName === 'ping') {
-            await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
+           else if (commandName === 'ping') {
+            await interaction.reply({ content: '...' });
+        }
+        else if (commandName === 'room') {
+            const channelName = interaction.options.getString('name');
+
+            try {
+                const guild = interaction.guild;
+                const channel = await guild.channels.create({
+                    name: channelName,
+                    type: ChannelType.GuildText,
+                    parent: interaction.channel.parentId,
+                });
+
+                await interaction.reply({ 
+                    content: `✅ تم إنشاء القناة بنجاح: <#${channel.id}>`, 
+                    ephemeral: 1 
+                });
+            } catch (error) {
+                console.error(error);
+                await interaction.reply({ 
+                    content: '❌ عذراً، ليس لدي صلاحيات كافية لإنشاء القنوات.', 
+                    ephemeral: 1 
+                });
+            }
+        }
+        else {
+            await interaction.reply({ ... });
         }
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
