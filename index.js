@@ -160,8 +160,6 @@ const botCommandsList = [
     { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
     { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
     { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
-    { name: 'room', desc: 'إنشاء قناة صوتية باسم مزخرف' },
-
 ];
 
 
