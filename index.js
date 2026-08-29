@@ -178,6 +178,7 @@ const commands = [
     new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels).addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
     new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
+     
     new SlashCommandBuilder()
         .setName('room')
         .setDescription('إنشاء قناة صوتية باسم مزخرف')
@@ -189,11 +190,15 @@ const commands = [
     new SlashCommandBuilder()
         .setName('announcement')
         .setDescription('إرسال إعلان مخصص وروم مخصص')
-  
-        .setDescription('إنشاء قناة صوتية باسم مزخرف')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('اختر الروم المراد الإرسال فيه')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(true))
         .addStringOption(option =>
-            option.setName('name')
-                .setDescription('اسم القناة المراد إنشاؤها')
+            option.setName('message')
+                .setDescription('اكتب الرسالة المراد إرسالها')
                 .setRequired(true)),
 
 
