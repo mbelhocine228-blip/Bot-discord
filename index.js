@@ -166,7 +166,14 @@ const commands = [
         .addAttachmentOption(option =>
             option.setName('image')
                 .setDescription('اختر صورة الإعلان المراد إرفاقها')
-                .setRequired(false)),
+               .setRequired(false)),
+    new SlashCommandBuilder()
+        .setName('room')
+        .setDescription('إنشاء قناة جديدة')
+        .addStringOption(option =>
+            option.setName('name')
+                .setDescription('اسم القناة المراد إنشاؤها')
+                .setRequired(true)),
     new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
     new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
     new SlashCommandBuilder().setName('avatar').setDescription('عرض صورة بروفايلك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
