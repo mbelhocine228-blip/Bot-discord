@@ -978,11 +978,19 @@ const SONG_CATALOG = [
 
 async function findYouTubeTrack(query) {
     const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
-    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query };
-
+    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query, source: 'YouTube' };
     const results = await ytSearch(query);
     const video = results && results.videos && results.videos[0];
-    return video ? { title: video.title, url: video.url } : null;
+    return video ? { title: video.title, url: video.url, source: 'YouTube' } : null;
+}
+
+async function findSoundCloudTrack(query) {
+    const isSoundCloudUrl = /^https?:\/\/(?:www\.)?soundcloud\.com\//i.test(query);
+    if (isSoundCloudUrl) return { title: 'رابط SoundCloud', url: query, source: 'SoundCloud' };
+    const result = await youtubeDl('scsearch1:' + query, { dumpSingleJson: true, skipDownload: true, flatPlaylist: true, noWarnings: true, quiet: true });
+    const track = result && ((result.entries && result.entries[0]) || result);
+    if (!track || !track.id) return null;
+    return { title: track.title || query, url: track.webpage_url || track.original_url, source: 'SoundCloud' };
 }
 
 function stopVoicePlayer(guildId) {
@@ -1554,14 +1562,26 @@ client.on('interactionCreate', async interaction => {
                 return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
             }
             try {
-                const track = await findYouTubeTrack(query);
-                if (!track) return interaction.editReply({ content: `❌ لم أجد نتائج في يوتيوب عن: **${query}**` });
-                await playYouTubeTrack(voiceChannel, track);
-                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من يوتيوب الآن في ${voiceChannel}\n🔗 ${track.url}` });
+                let track = null;
+                try { track = await findYouTubeTrack(query); } catch (error) { console.error('YouTube search failed:', error.message); }
+                if (!track) {
+                    try { track = await findSoundCloudTrack(query); } catch (error) { console.error('SoundCloud search failed:', error.message); }
+                }
+                if (!track) return interaction.editReply({ content: `❌ لم أجد الأغنية في يوتيوب أو SoundCloud عن: **${query}**` });
+                try {
+                    await playYouTubeTrack(voiceChannel, track);
+                } catch (firstError) {
+                    if (track.source !== 'YouTube') throw firstError;
+                    console.error('YouTube playback failed, trying SoundCloud:', firstError.message);
+                    track = await findSoundCloudTrack(query);
+                    if (!track) throw firstError;
+                    await playYouTubeTrack(voiceChannel, track);
+                }
+                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من ${track.source} الآن في ${voiceChannel}\n🔗 ${track.url}` });
             } catch (err) {
-                console.error('YouTube playback failed:', err);
-                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[`\n]/g, ' ').slice(0, 240);
-                await interaction.editReply({ content: `❌ فشل تشغيل يوتيوب. السبب: \`${reason}\`` });
+                console.error('Music playback failed:', err);
+                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 240);
+                await interaction.editReply({ content: `❌ فشل تشغيل الأغنية. السبب: \`${reason}\`` });
             }
         }
         else if (commandName === 'stop') {
