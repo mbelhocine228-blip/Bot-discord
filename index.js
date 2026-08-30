@@ -8,7 +8,6 @@ const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerSta
 const { spawn } = require('child_process');
 const youtubeDl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
-const ytSearch = require('yt-search');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -979,9 +978,20 @@ const SONG_CATALOG = [
 async function findYouTubeTrack(query) {
     const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
     if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query };
-    const results = await ytSearch(query);
-    const video = results && results.videos && results.videos[0];
-    return video ? { title: video.title, url: video.url } : null;
+
+    const result = await youtubeDl(`ytsearch1:${query}`, {
+        dumpSingleJson: true,
+        skipDownload: true,
+        flatPlaylist: true,
+        noWarnings: true,
+        quiet: true
+    });
+    const video = result && ((result.entries && result.entries[0]) || result);
+    if (!video || !video.id) return null;
+    return {
+        title: video.title || query,
+        url: video.webpage_url || `https://www.youtube.com/watch?v=${video.id}`
+    };
 }
 
 function stopVoicePlayer(guildId) {
@@ -1542,12 +1552,12 @@ client.on('interactionCreate', async interaction => {
         // ---------------- Music commands handlers ----------------
         else if (commandName === 'play') {
             const query = options.getString('query', true).trim();
-            const voiceChannel = member.voice.channel;
-            if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
-            if (!voiceChannel.joinable || !voiceChannel.speakable) {
-                return interaction.reply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.', ephemeral: true });
-            }
             await interaction.deferReply({ ephemeral: true });
+            const voiceChannel = member.voice.channel;
+            if (!voiceChannel) return interaction.editReply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.' });
+            if (!voiceChannel.joinable || !voiceChannel.speakable) {
+                return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
+            }
             try {
                 const track = await findYouTubeTrack(query);
                 if (!track) return interaction.editReply({ content: `❌ لم أجد نتائج في يوتيوب عن: **${query}**` });
