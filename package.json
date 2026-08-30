@@ -15,7 +15,8 @@
     "passport-discord": "^0.1.4",
     "@discordjs/voice": "^0.18.0",
     "ytdl-core": "^4.11.5",
-    "yt-search": "^2.0.0"
+    "yt-search": "^2.0.0",
+    "play-dl": "^1.9.7"
   },
   "engines": {
     "node": ">=18.0.0"
