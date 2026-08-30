@@ -1036,6 +1036,10 @@ async function playYouTubeTrack(voiceChannel, track) {
         youtubeProcess.stdout.pipe(ffmpegProcess.stdin);
         youtubeProcess.stderr.on('data', data => console.error('yt-dlp:', data.toString().trim()));
         ffmpegProcess.stderr.on('data', data => console.error('ffmpeg:', data.toString().trim()));
+        youtubeProcess.on('error', error => console.error('yt-dlp process error:', error.message));
+        ffmpegProcess.on('error', error => console.error('ffmpeg process error:', error.message));
+        youtubeProcess.stdout.on('error', error => console.error('yt-dlp output error:', error.message));
+        ffmpegProcess.stdin.on('error', () => {});
 
         const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
         const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
@@ -1564,8 +1568,9 @@ client.on('interactionCreate', async interaction => {
                 await playYouTubeTrack(voiceChannel, track);
                 await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من يوتيوب الآن في ${voiceChannel}\n🔗 ${track.url}` });
             } catch (err) {
-                console.error(err);
-                await interaction.editReply({ content: '❌ تعذر البحث أو تشغيل الأغنية من يوتيوب حالياً.' });
+                console.error('YouTube playback failed:', err);
+                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[`\n]/g, ' ').slice(0, 240);
+                await interaction.editReply({ content: `❌ فشل تشغيل يوتيوب. السبب: \`${reason}\`` });
             }
         }
         else if (commandName === 'stop') {
