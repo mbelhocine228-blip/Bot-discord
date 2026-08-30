@@ -7,6 +7,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 const ytSearch = require('yt-search');
+const play = require('play-dl');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -976,8 +977,8 @@ const SONG_CATALOG = [
 
 async function findYouTubeTrack(query) {
     if (ytdl.validateURL(query)) return { title: 'رابط يوتيوب', url: query };
-    const result = await ytSearch(query);
-    const video = result.videos && result.videos[0];
+    const results = await play.search(query, { limit: 1 });
+    const video = results && results[0];
     return video ? { title: video.title, url: video.url } : null;
 }
 
@@ -999,13 +1000,8 @@ async function playYouTubeTrack(voiceChannel, track) {
     });
     await entersState(connection, VoiceConnectionStatus.Ready, 15000);
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-    const stream = ytdl(track.url, {
-        filter: format => format.hasAudio && !format.hasVideo && format.container === 'webm' && format.audioCodec === 'opus',
-        quality: 'highestaudio',
-        highWaterMark: 1 << 25
-    });
-    const { stream: probedStream, type } = await demuxProbe(stream);
-    const resource = createAudioResource(probedStream, { inputType: type });
+    const streamData = await play.stream(track.url, { quality: 2 });
+    const resource = createAudioResource(streamData.stream, { inputType: streamData.type });
     connection.subscribe(player);
     player.play(resource);
 
