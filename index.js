@@ -4,7 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 const ytSearch = require('yt-search');
 
@@ -997,6 +997,7 @@ async function playYouTubeTrack(voiceChannel, track) {
         guildId: voiceChannel.guild.id,
         adapterCreator: voiceChannel.guild.voiceAdapterCreator
     });
+    await entersState(connection, VoiceConnectionStatus.Ready, 15000);
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
     const stream = ytdl(track.url, {
         filter: format => format.hasAudio && !format.hasVideo && format.container === 'webm' && format.audioCodec === 'opus',
@@ -1511,8 +1512,7 @@ client.on('interactionCreate', async interaction => {
             const query = options.getString('query', true).trim();
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
-            const botPermissions = voiceChannel.permissionsFor(guild.members.me);
-            if (!botPermissions || !botPermissions.has(PermissionsBitField.Flags.Connect) || !botPermissions.has(PermissionsBitField.Flags.Speak)) {
+            if (!voiceChannel.joinable || !voiceChannel.speakable) {
                 return interaction.reply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.', ephemeral: true });
             }
             await interaction.deferReply({ ephemeral: true });
