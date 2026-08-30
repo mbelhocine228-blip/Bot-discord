@@ -10,6 +10,9 @@ const { spawn } = require('child_process');
 const youtubeDl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
 
+const { Connectors } = require('shoukaku');
+const { Kazagumo } = require('kazagumo');
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -22,6 +25,30 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates
     ] 
 });
+
+const LAVALINK_HOST = process.env.LAVALINK_HOST || 'lavalinkv4.serenetia.com';
+const LAVALINK_PORT = process.env.LAVALINK_PORT || '443';
+const LAVALINK_PASSWORD = process.env.LAVALINK_PASSWORD || 'https://dsc.gg/ajidevserver';
+const LAVALINK_SECURE = process.env.LAVALINK_SECURE !== 'false';
+const kazagumo = new Kazagumo({
+    defaultSearchEngine: 'youtube',
+    send: (guildId, payload) => {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) guild.shard.send(payload);
+    }
+}, new Connectors.DiscordJS(client), [{
+    name: 'free-lavalink',
+    url: LAVALINK_HOST + ':' + LAVALINK_PORT,
+    auth: LAVALINK_PASSWORD,
+    secure: LAVALINK_SECURE
+}], { reconnectTries: 10, reconnectInterval: 10 });
+
+kazagumo.shoukaku.on('ready', name => console.log('Lavalink ' + name + ': Ready'));
+kazagumo.shoukaku.on('error', (name, error) => console.error('Lavalink ' + name + ' error:', error.message));
+kazagumo.shoukaku.on('close', (name, code, reason) => console.warn('Lavalink ' + name + ' closed:', code, reason || 'no reason'));
+kazagumo.shoukaku.on('disconnect', name => console.warn('Lavalink ' + name + ' disconnected'));
+kazagumo.on('playerStart', (player, track) => console.log('Playing ' + track.title + ' in guild ' + player.guildId));
+kazagumo.on('playerEmpty', player => { console.log('Queue empty in guild ' + player.guildId); kazagumo.destroyPlayer(player.guildId); });
 
 const guildSettings = new Map();
 const serverFeatures = new Map();
@@ -976,96 +1003,26 @@ const SONG_CATALOG = [
 ];
 // --------------------------------------------------------------------------
 
-async function findYouTubeTrack(query) {
-    const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
-    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query, source: 'YouTube' };
-    const results = await ytSearch(query);
-    const video = results && results.videos && results.videos[0];
-    return video ? { title: video.title, url: video.url, source: 'YouTube' } : null;
+function getMusicPlayer(guildId) {
+    return kazagumo.players.get(guildId);
 }
 
-async function findSoundCloudTrack(query) {
-    const isSoundCloudUrl = /^https?:\/\/(?:www\.)?soundcloud\.com\//i.test(query);
-    if (isSoundCloudUrl) return { title: 'رابط SoundCloud', url: query, source: 'SoundCloud' };
-    const result = await youtubeDl('scsearch1:' + query, { dumpSingleJson: true, skipDownload: true, flatPlaylist: true, noWarnings: true, quiet: true });
-    const track = result && ((result.entries && result.entries[0]) || result);
-    if (!track || !track.id) return null;
-    return { title: track.title || query, url: track.webpage_url || track.original_url, source: 'SoundCloud' };
-}
-
-function stopVoicePlayer(guildId) {
-    const entry = voicePlayers.get(guildId);
-    if (!entry) return false;
-    try { entry.player.stop(true); } catch (e) {}
-    try { entry.connection.destroy(); } catch (e) {}
-    voicePlayers.delete(guildId);
+function stopMusicPlayer(guildId) {
+    const player = getMusicPlayer(guildId);
+    if (!player) return false;
+    try { kazagumo.destroyPlayer(guildId); } catch (error) { console.error('Lavalink destroy error:', error.message); }
     return true;
 }
 
-async function playYouTubeTrack(voiceChannel, track) {
-    stopVoicePlayer(voiceChannel.guild.id);
+function formatTrackLength(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return minutes + ':' + seconds;
+}
 
-    const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: voiceChannel.guild.id,
-        adapterCreator: voiceChannel.guild.voiceAdapterCreator
-    });
-
-    let youtubeProcess;
-    let ffmpegProcess;
-    try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        youtubeProcess = youtubeDl.exec(track.url, {
-            output: '-',
-            format: 'bestaudio/best',
-            noPlaylist: true,
-            quiet: true,
-            noWarnings: true
-        }, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-        ffmpegProcess = spawn(ffmpegPath, [
-            '-hide_banner', '-loglevel', 'error',
-            '-i', 'pipe:0',
-            '-f', 's16le',
-            '-ar', '48000',
-            '-ac', '2',
-            'pipe:1'
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-        youtubeProcess.stdout.pipe(ffmpegProcess.stdin);
-        youtubeProcess.stderr.on('data', data => console.error('yt-dlp:', data.toString().trim()));
-        ffmpegProcess.stderr.on('data', data => console.error('ffmpeg:', data.toString().trim()));
-        youtubeProcess.on('error', error => console.error('yt-dlp process error:', error.message));
-        ffmpegProcess.on('error', error => console.error('ffmpeg process error:', error.message));
-        youtubeProcess.stdout.on('error', error => console.error('yt-dlp output error:', error.message));
-        ffmpegProcess.stdin.on('error', () => {});
-
-        const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
-        const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-        connection.subscribe(player);
-        player.play(resource);
-
-        const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now(), youtubeProcess, ffmpegProcess };
-        voicePlayers.set(voiceChannel.guild.id, entry);
-
-        const cleanup = () => {
-            const current = voicePlayers.get(voiceChannel.guild.id);
-            if (current && current.player === player) {
-                try { youtubeProcess.kill('SIGKILL'); } catch (e) {}
-                try { ffmpegProcess.kill('SIGKILL'); } catch (e) {}
-                try { current.connection.destroy(); } catch (e) {}
-                voicePlayers.delete(voiceChannel.guild.id);
-            }
-        };
-        player.once(AudioPlayerStatus.Idle, cleanup);
-        player.once('error', error => { console.error('Music player error:', error); cleanup(); });
-        return entry;
-    } catch (error) {
-        try { youtubeProcess?.kill('SIGKILL'); } catch (e) {}
-        try { ffmpegProcess?.kill('SIGKILL'); } catch (e) {}
-        try { connection.destroy(); } catch (e) {}
-        throw error;
-    }
+function getCurrentTrack(player) {
+    return player && (player.queue.current || player.queue[0]);
 }
 
 client.on('interactionCreate', async interaction => {
@@ -1558,58 +1515,55 @@ client.on('interactionCreate', async interaction => {
             await interaction.deferReply({ ephemeral: true });
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.editReply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.' });
-            if (!voiceChannel.joinable || !voiceChannel.speakable) {
-                return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
-            }
+            if (!voiceChannel.joinable || !voiceChannel.speakable) return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
             try {
-                let track = null;
-                try { track = await findYouTubeTrack(query); } catch (error) { console.error('YouTube search failed:', error.message); }
-                if (!track) {
-                    try { track = await findSoundCloudTrack(query); } catch (error) { console.error('SoundCloud search failed:', error.message); }
+                let player = getMusicPlayer(guild.id);
+                if (!player) {
+                    player = await kazagumo.createPlayer({ guildId: guild.id, textId: interaction.channelId, voiceId: voiceChannel.id, volume: 70 });
+                } else if (player.voiceId !== voiceChannel.id) {
+                    await player.setVoiceChannel(voiceChannel.id);
                 }
-                if (!track) return interaction.editReply({ content: `❌ لم أجد الأغنية في يوتيوب أو SoundCloud عن: **${query}**` });
-                try {
-                    await playYouTubeTrack(voiceChannel, track);
-                } catch (firstError) {
-                    if (track.source !== 'YouTube') throw firstError;
-                    console.error('YouTube playback failed, trying SoundCloud:', firstError.message);
-                    track = await findSoundCloudTrack(query);
-                    if (!track) throw firstError;
-                    await playYouTubeTrack(voiceChannel, track);
-                }
-                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من ${track.source} الآن في ${voiceChannel}\n🔗 ${track.url}` });
-            } catch (err) {
-                console.error('Music playback failed:', err);
-                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 240);
-                await interaction.editReply({ content: `❌ فشل تشغيل الأغنية. السبب: \`${reason}\`` });
+                const result = await kazagumo.search(query, { requester: interaction.user });
+                if (!result || !result.tracks || !result.tracks.length) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم.' });
+                if (result.type === 'PLAYLIST') player.queue.add(result.tracks);
+                else player.queue.add(result.tracks[0]);
+                const queuedTrack = result.tracks[0];
+                const position = Math.max(1, player.queue.length || 1);
+                if (!player.playing && !player.paused) await player.play();
+                const label = result.type === 'PLAYLIST' ? 'قائمة التشغيل' : 'الأغنية';
+                await interaction.editReply({ content: `🎵 ${label} **${queuedTrack.title}**
+✅ تمت الإضافة إلى Queue (${formatTrackLength(queuedTrack.length)}) في الموضع **${position}**.` });
+            } catch (error) {
+                console.error('Lavalink play failed:', error);
+                const reason = String(error && error.message || error || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 220);
+                await interaction.editReply({ content: `❌ تعذر الاتصال بمحرك الموسيقى. السبب: \`${reason}\`` });
             }
         }
         else if (commandName === 'stop') {
-            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
-            stopVoicePlayer(guild.id);
-            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
+            if (!stopMusicPlayer(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
+            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل ومسح Queue.', ephemeral: true });
         }
         else if (commandName === 'leave') {
-            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
-            stopVoicePlayer(guild.id);
-            await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
+            if (!stopMusicPlayer(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
+            await interaction.reply({ content: '✅ خرجت من القناة الصوتية ومسحت Queue.', ephemeral: true });
         }
         else if (commandName === 'pause') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            entry.player.pause();
+            const player = getMusicPlayer(guild.id);
+            if (!player || !player.playing) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            player.pause(true);
             await interaction.reply({ content: '⏸️ تم إيقاف الموسيقى مؤقتاً.', ephemeral: true });
         }
         else if (commandName === 'resume') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
-            entry.player.unpause();
+            const player = getMusicPlayer(guild.id);
+            if (!player || !player.paused) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
+            player.pause(false);
             await interaction.reply({ content: '▶️ تم استكمال الموسيقى.', ephemeral: true });
         }
         else if (commandName === 'nowplaying') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            await interaction.reply({ content: `🎶 تعمل الآن: **${entry.title}**\n🔗 ${entry.url}` });
+            const player = getMusicPlayer(guild.id);
+            const track = getCurrentTrack(player);
+            if (!player || !track) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            await interaction.reply({ content: `🎶 تعمل الآن: **${track.title}**\n⏱️ ${formatTrackLength(track.length)}` });
         }
         // --------------------------------------------------------
         else {
