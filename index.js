@@ -6,19 +6,19 @@ const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
 const ytSearch = require('yt-search');
-const ytdl = require('@distube/ytdl-core');
 const { spawn } = require('child_process');
 const youtubeDl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
 
-const { Connectors } = require('shoukaku');
-const { Kazagumo } = require('kazagumo');
-
 const app = express();
 app.set('trust proxy', 1);
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
+if (!DISCORD_TOKEN) { console.error('DISCORD_TOKEN is missing'); process.exit(1); }
+const AI_CHANNEL_PREFIX = 'ai-private:';
+const aiSessions = new Map();
+
 function getAiProvider() {
-    const clean = value => String(value || '').trim().replace(/^['\"]|['\"]$/g, '');
+    const clean = value => String(value || '').trim().replace(/^['"]|['"]$/g, '');
     return { geminiKey: clean(process.env.GEMINI_API_KEY), openAiKey: clean(process.env.OPENAI_API_KEY) };
 }
 
@@ -58,6 +58,289 @@ async function askCodingAssistant(channelId, content) {
     return answer;
 }
 
+function splitDiscordMessage(text) {
+    const chunks = [];
+    let rest = String(text || '');
+    while (rest.length > 1900) {
+        let cut = rest.lastIndexOf('\n', 1900);
+        if (cut < 500) cut = rest.lastIndexOf(' ', 1900);
+        if (cut < 500) cut = 1900;
+        chunks.push(rest.slice(0, cut));
+        rest = rest.slice(cut).trimStart();
+    }
+    if (rest) chunks.push(rest);
+    return chunks.length ? chunks : ['لم أستطع توليد رد الآن.'];
+}
+
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
+    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
+    const provider = getAiProvider();
+    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY أو OPENAI_API_KEY في Render ثم نفّذ Redeploy.');
+    try {
+        if ('sendTyping' in message.channel) await message.channel.sendTyping();
+        const answer = await askCodingAssistant(message.channel.id, message.content);
+        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
+    } catch (error) {
+        console.error('AI channel error:', error.message);
+        const messageText = /401|403/.test(error.message) ? 'مفتاح الذكاء الاصطناعي مرفوض أو منتهي. أنشئ مفتاحًا جديدًا وتأكد من تفعيله.' : 'خطأ من مزود الذكاء الاصطناعي: ' + error.message.slice(0, 180);
+        await message.reply(messageText).catch(() => {});
+    }
+});
+
+
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMembers, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
+    ] 
+});
+
+const guildSettings = new Map();
+const serverFeatures = new Map();
+const guildClubTimers = new Map();
+const serverConfigs = new Map();
+
+// Voice players per guild
+const voicePlayers = new Map(); // guildId -> { connection, player }
+
+ // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
+const SPAM_LIMIT = 5;         
+const SPAM_INTERVAL = 5000;   
+const ADMIN_CHANNEL_ID = '1527797722122555475'; 
+const spamTracker = new Map(); 
+// ===================================================================
+
+function getDefaultConfig(guildId) {
+    return {
+        guildId,
+        settings: { prefix: "!", language: "en" },
+        serverDiscovery: { enabled: false, description: "" },
+        premium: { active: false, tier: 0 },
+        moderation: {
+            antiSpam: true,
+            antiLink: false,
+            badWords: ["badword1", "badword2"],
+            modLogChannel: null
+        },
+        roles: {
+            autorole: null,
+            reactionRoles: []
+        },
+        customCommands: [],
+        notifications: {
+            welcomeChannel: null,
+            welcomeMessage: "Welcome {user} to RKS POWER!",
+            twitchAnnounceChannel: null
+        },
+        utility: {
+            embedColor: "#FFD700"
+        }
+    };
+}
+
+function getGuildFeatures(guildId) {
+    if (!serverFeatures.has(guildId)) {
+        serverFeatures.set(guildId, {
+            attachmentspam: true,
+            automod: true,
+            capslimit: true,
+            capspunish: true,
+            censor: true,
+            linkspam: true,
+            deletefiles: true,
+            mentionsspam: true,
+            gaming_commands: true,
+            notifications: true
+        });
+    }
+    return serverFeatures.get(guildId);
+}
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(session({ 
+    secret: 'rks-koya-master-secret-999', 
+    resave: false, 
+    saveUninitialized: false,
+    cookie: { secure: false, httpOnly: true, sameSite: 'lax' }
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(new DiscordStrategy({
+    clientID: '1171579175635800175',         
+    clientSecret: process.env.DISCORD_CLIENT_SECRET, 
+    callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
+    scope: ['identify', 'guilds']
+}, (accessToken, refreshToken, profile, done) => {
+    return done(null, profile);
+}));
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+app.get('/login', passport.authenticate('discord'));
+app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
+app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
+
+const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
+
+const botCommandsList = [
+    { name: 'ban', desc: 'حظر عضو من السيرفر' },
+    { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
+    { name: 'kick', desc: 'طرد عضو من السيرفر' },
+    { name: 'mute', desc: 'كتم عضو مؤقتاً (Timeout)' },
+    { name: 'unmute', desc: 'فك الكتم عن عضو' },
+    { name: 'clear', desc: 'مسح وحذف الرسائل بسرعة' },
+    { name: 'warn', desc: 'تحذير عضو مخالف' },
+    { name: 'lock', desc: 'قفل الروم الحالي لمنع التحدث' },
+    { name: 'unlock', desc: 'فتح الروم الحالي' },
+    { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
+    { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
+    { name: 'say', desc: 'تكرار الكلام عبر البوت' },
+    { name: 'announcement', desc: 'إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص' },
+    { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
+    { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
+    { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
+    { name: 'serverinfo', desc: 'عرض معلومات السيرفر الكاملة' },
+    { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
+    { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
+    { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
+    { name: 'google', desc: 'البحث وجلب الإجابة مباشرة من محرك البحث' },
+    { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
+    { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
+    { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
+    { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
+    { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
+    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
+    { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
+    { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
+    { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
+    { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
+    { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
+    { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
+    { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
+    { name: 'private', desc: 'فتح قناة خاصة مع مساعد البرمجة' },
+    { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
+];
+
+const commands = [
+    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('mute').setDescription('كتم عضو مؤقتاً').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('unmute').setDescription('فك الكتم عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل بسرعة').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addIntegerOption(opt => opt.setName('count').setDescription('العدد').setRequired(true)),
+    new SlashCommandBuilder().setName('warn').setDescription('تحذير عضو').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
+    new SlashCommandBuilder().setName('lock').setDescription('قفل الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder().setName('unlock').setDescription('فتح الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels).addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
+    new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
+    new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('announcement')
+        .setDescription('إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addChannelOption(option =>
+            option.setName('channel')
+                .setDescription('اختر الروم المراد إرسال الإعلان فيه')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('message')
+                .setDescription('اكتب نص الإعلان المراد إرساله')
+                .setRequired(true))
+        .addAttachmentOption(option =>
+            option.setName('image')
+                .setDescription('اختر صورة الإعلان المراد إرفاقها (اختياري)')
+                .setRequired(false)),
+    new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
+    new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
+    new SlashCommandBuilder().setName('avatar').setDescription('عرض صورة بروفايلك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
+    new SlashCommandBuilder().setName('serverinfo').setDescription('عرض معلومات السيرفر الكاملة'),
+    new SlashCommandBuilder().setName('userinfo').setDescription('عرض معلومات عضويتك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
+    new SlashCommandBuilder().setName('roll').setDescription('رمي زهر عشوائي (رقم من 1 لـ 100)'),
+    new SlashCommandBuilder().setName('coinflip').setDescription('لعبة طرة أو كتابة'),
+    new SlashCommandBuilder().setName('google').setDescription('البحث وجلب الإجابة مباشرة من محرك البحث').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
+    new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
+    new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
+    new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
+    new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
+    new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
+    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
+    new SlashCommandBuilder().setName('eventsched').setDescription('جدولة سباق أو فعالية جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('event')
+        .setDescription('بدء مسابقة مع عد تنازلي حي للوقت (مثال: 0:01:30)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
+        .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
+    // ---- Music commands ----
+    new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
+    new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
+    new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
+    new SlashCommandBuilder().setName('pause').setDescription('إيقاف الموسيقى مؤقتاً'),
+    new SlashCommandBuilder().setName('resume').setDescription('استكمال الموسيقى'),
+    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض الأغنية التي تعمل حالياً'),
+    // -------------------------
+    new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
+    new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
+    new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
+    new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
+    new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
+    new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة مع مساعد البرمجة'),
+    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard')
+].map(cmd => cmd.toJSON());
+
+const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+client.once('ready', async () => {
+    console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
+    for (const guild of client.guilds.cache.values()) {
+        await brandBotInGuild(guild);
+    }
+    try {
+        await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
+        console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
+    } catch (error) { console.error(error); }
+
+    setInterval(() => {
+        guildSettings.forEach((settings, guildId) => {
+            if (settings && settings.newsChannelId) {
+                const guild = client.guilds.cache.get(guildId);
+                if (guild) {
+                    const features = getGuildFeatures(guildId);
+                    if (features.notifications) {
+                        const channel = guild.channels.cache.get(settings.newsChannelId);
+                        if (channel) {
+                            const timerData = guildClubTimers.get(guildId);
+                            if (timerData) {
+                                const embed = new EmbedBuilder()
+                                    .setTitle('🏁 التحديث التلقائي لمهام كلان RKS•ＰＯＷＥＲ')
+                                    .setDescription('تابع أحدث أوقات المهام الحالية في اللعبة:')
+                                    .setColor('#FFD700')
+                                    .addFields(
+                                        { name: '🏎️ CLUB ENDURANCE', value: `⏳ المتبقي: **${timerData.endurance}**`, inline: false },
+                                        { name: '⚔️ CLUB DUEL', value: `⏳ المتبقي: **${timerData.duel}**`, inline: false }
+                                    )
+                                    .setTimestamp();
+
+                                channel.send({ embeds: [embed] }).catch(() => {});
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }, 60 * 60 * 1000);
+});
+
+// ==================== معالج الرسائل ونظام الحماية المدمج المطور ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     
@@ -771,84 +1054,97 @@ const SONG_CATALOG = [
 ];
 // --------------------------------------------------------------------------
 
-function getMusicPlayer(guildId) {
-    return kazagumo.players.get(guildId);
+async function findYouTubeTrack(query) {
+    const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
+    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query, source: 'YouTube' };
+    const results = await ytSearch(query);
+    const video = results && results.videos && results.videos[0];
+    return video ? { title: video.title, url: video.url, source: 'YouTube' } : null;
 }
 
-function stopMusicPlayer(guildId) {
-    const player = getMusicPlayer(guildId);
-    if (!player) return false;
-    try { kazagumo.destroyPlayer(guildId); } catch (error) { console.error('Lavalink destroy error:', error.message); }
+async function findSoundCloudTrack(query) {
+    const isSoundCloudUrl = /^https?:\/\/(?:www\.)?soundcloud\.com\//i.test(query);
+    if (isSoundCloudUrl) return { title: 'رابط SoundCloud', url: query, source: 'SoundCloud' };
+    const result = await youtubeDl('scsearch1:' + query, { dumpSingleJson: true, skipDownload: true, flatPlaylist: true, noWarnings: true, quiet: true });
+    const track = result && ((result.entries && result.entries[0]) || result);
+    if (!track || !track.id) return null;
+    return { title: track.title || query, url: track.webpage_url || track.original_url, source: 'SoundCloud' };
+}
+
+function stopVoicePlayer(guildId) {
+    const entry = voicePlayers.get(guildId);
+    if (!entry) return false;
+    try { entry.player.stop(true); } catch (e) {}
+    try { entry.connection.destroy(); } catch (e) {}
+    voicePlayers.delete(guildId);
     return true;
 }
 
-function formatTrackLength(milliseconds) {
-    const totalSeconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = String(totalSeconds % 60).padStart(2, '0');
-    return minutes + ':' + seconds;
-}
+async function playYouTubeTrack(voiceChannel, track) {
+    stopVoicePlayer(voiceChannel.guild.id);
 
-function getCurrentTrack(player) {
-    return player && (player.queue.current || player.queue[0]);
-}
-
-
-// ==================== AI coding private channels ====================
-function splitDiscordMessage(text) {
-    const chunks = [];
-    let rest = String(text || '');
-    while (rest.length > 1900) {
-        let cut = rest.lastIndexOf('\n', 1900);
-        if (cut < 500) cut = rest.lastIndexOf(' ', 1900);
-        if (cut < 500) cut = 1900;
-        chunks.push(rest.slice(0, cut));
-        rest = rest.slice(cut).trimStart();
-    }
-    if (rest) chunks.push(rest);
-    return chunks.length ? chunks : ['لم أستطع توليد رد الآن.'];
-}
-
-async function askCodingAssistant(channelId, content) {
-    const apiKey = getOpenAiKey();
-    if (!apiKey) throw new Error('OPENAI_API_KEY is missing');
-    const history = aiSessions.get(channelId) || [];
-    history.push({ role: 'user', content });
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-        body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            max_tokens: 2000,
-            messages: [
-                { role: 'system', content: 'أنت مساعد برمجة خبير داخل قناة Discord خاصة. اكتب أكوادًا قابلة للنسخ، اشرح باختصار، صحح الأخطاء، وساعد في frontend وbackend وDiscord وGitHub وقواعد البيانات. لا تدّع أنك شغلت كودًا أو عدّلت ملفات لم تعدّلها فعليًا.' },
-                ...history.slice(-20)
-            ]
-        })
+    const connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: voiceChannel.guild.id,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator
     });
-    if (!response.ok) { const errorBody = await response.text(); throw new Error('OpenAI request failed: ' + response.status + ' ' + errorBody.slice(0, 300)); }
-    const data = await response.json();
-    const answer = data.choices?.[0]?.message?.content?.trim() || 'لم أستطع توليد رد الآن.';
-    history.push({ role: 'assistant', content: answer });
-    aiSessions.set(channelId, history.slice(-20));
-    return answer;
-}
 
-client.on('messageCreate', async message => {
-    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
-    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
-    const provider = getAiProvider();
-    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY في Render ثم نفّذ Redeploy يدوي.');
+    let youtubeProcess;
+    let ffmpegProcess;
     try {
-        if ('sendTyping' in message.channel) await message.channel.sendTyping();
-        const answer = await askCodingAssistant(message.channel.id, message.content);
-        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+        youtubeProcess = youtubeDl.exec(track.url, {
+            output: '-',
+            format: 'bestaudio/best',
+            noPlaylist: true,
+            quiet: true,
+            noWarnings: true
+        }, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        ffmpegProcess = spawn(ffmpegPath, [
+            '-hide_banner', '-loglevel', 'error',
+            '-i', 'pipe:0',
+            '-f', 's16le',
+            '-ar', '48000',
+            '-ac', '2',
+            'pipe:1'
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        youtubeProcess.stdout.pipe(ffmpegProcess.stdin);
+        youtubeProcess.stderr.on('data', data => console.error('yt-dlp:', data.toString().trim()));
+        ffmpegProcess.stderr.on('data', data => console.error('ffmpeg:', data.toString().trim()));
+        youtubeProcess.on('error', error => console.error('yt-dlp process error:', error.message));
+        ffmpegProcess.on('error', error => console.error('ffmpeg process error:', error.message));
+        youtubeProcess.stdout.on('error', error => console.error('yt-dlp output error:', error.message));
+        ffmpegProcess.stdin.on('error', () => {});
+
+        const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
+        const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+        connection.subscribe(player);
+        player.play(resource);
+
+        const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now(), youtubeProcess, ffmpegProcess };
+        voicePlayers.set(voiceChannel.guild.id, entry);
+
+        const cleanup = () => {
+            const current = voicePlayers.get(voiceChannel.guild.id);
+            if (current && current.player === player) {
+                try { youtubeProcess.kill('SIGKILL'); } catch (e) {}
+                try { ffmpegProcess.kill('SIGKILL'); } catch (e) {}
+                try { current.connection.destroy(); } catch (e) {}
+                voicePlayers.delete(voiceChannel.guild.id);
+            }
+        };
+        player.once(AudioPlayerStatus.Idle, cleanup);
+        player.once('error', error => { console.error('Music player error:', error); cleanup(); });
+        return entry;
     } catch (error) {
-        console.error('AI channel error:', error.message);
-        await message.reply(/401|403/.test(error.message) ? 'مفتاح Gemini مرفوض أو منتهي. أنشئ مفتاحًا جديدًا من Google AI Studio.' : 'خطأ من Gemini: ' + error.message.slice(0, 180));
+        try { youtubeProcess?.kill('SIGKILL'); } catch (e) {}
+        try { ffmpegProcess?.kill('SIGKILL'); } catch (e) {}
+        try { connection.destroy(); } catch (e) {}
+        throw error;
     }
-});
-// ======================================================================
+}
 
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
@@ -1359,55 +1655,58 @@ client.on('interactionCreate', async interaction => {
             await interaction.deferReply({ ephemeral: true });
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.editReply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.' });
-            if (!voiceChannel.joinable || !voiceChannel.speakable) return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
+            if (!voiceChannel.joinable || !voiceChannel.speakable) {
+                return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
+            }
             try {
-                let player = getMusicPlayer(guild.id);
-                if (!player) {
-                    player = await kazagumo.createPlayer({ guildId: guild.id, textId: interaction.channelId, voiceId: voiceChannel.id, volume: 70 });
-                } else if (player.voiceId !== voiceChannel.id) {
-                    await player.setVoiceChannel(voiceChannel.id);
+                let track = null;
+                try { track = await findYouTubeTrack(query); } catch (error) { console.error('YouTube search failed:', error.message); }
+                if (!track) {
+                    try { track = await findSoundCloudTrack(query); } catch (error) { console.error('SoundCloud search failed:', error.message); }
                 }
-                const result = await kazagumo.search(query, { requester: interaction.user });
-                if (!result || !result.tracks || !result.tracks.length) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم.' });
-                if (result.type === 'PLAYLIST') player.queue.add(result.tracks);
-                else player.queue.add(result.tracks[0]);
-                const queuedTrack = result.tracks[0];
-                const position = Math.max(1, player.queue.length || 1);
-                if (!player.playing && !player.paused) await player.play();
-                const label = result.type === 'PLAYLIST' ? 'قائمة التشغيل' : 'الأغنية';
-                await interaction.editReply({ content: `🎵 ${label} **${queuedTrack.title}**
-✅ تمت الإضافة إلى Queue (${formatTrackLength(queuedTrack.length)}) في الموضع **${position}**.` });
-            } catch (error) {
-                console.error('Lavalink play failed:', error);
-                const reason = String(error && error.message || error || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 220);
-                await interaction.editReply({ content: `❌ تعذر الاتصال بمحرك الموسيقى. السبب: \`${reason}\`` });
+                if (!track) return interaction.editReply({ content: `❌ لم أجد الأغنية في يوتيوب أو SoundCloud عن: **${query}**` });
+                try {
+                    await playYouTubeTrack(voiceChannel, track);
+                } catch (firstError) {
+                    if (track.source !== 'YouTube') throw firstError;
+                    console.error('YouTube playback failed, trying SoundCloud:', firstError.message);
+                    track = await findSoundCloudTrack(query);
+                    if (!track) throw firstError;
+                    await playYouTubeTrack(voiceChannel, track);
+                }
+                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من ${track.source} الآن في ${voiceChannel}\n🔗 ${track.url}` });
+            } catch (err) {
+                console.error('Music playback failed:', err);
+                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 240);
+                await interaction.editReply({ content: `❌ فشل تشغيل الأغنية. السبب: \`${reason}\`` });
             }
         }
         else if (commandName === 'stop') {
-            if (!stopMusicPlayer(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
-            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل ومسح Queue.', ephemeral: true });
+            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
+            stopVoicePlayer(guild.id);
+            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
         }
         else if (commandName === 'leave') {
-            if (!stopMusicPlayer(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
-            await interaction.reply({ content: '✅ خرجت من القناة الصوتية ومسحت Queue.', ephemeral: true });
+            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
+            stopVoicePlayer(guild.id);
+            await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
         }
         else if (commandName === 'pause') {
-            const player = getMusicPlayer(guild.id);
-            if (!player || !player.playing) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            player.pause(true);
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            entry.player.pause();
             await interaction.reply({ content: '⏸️ تم إيقاف الموسيقى مؤقتاً.', ephemeral: true });
         }
         else if (commandName === 'resume') {
-            const player = getMusicPlayer(guild.id);
-            if (!player || !player.paused) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
-            player.pause(false);
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
+            entry.player.unpause();
             await interaction.reply({ content: '▶️ تم استكمال الموسيقى.', ephemeral: true });
         }
         else if (commandName === 'nowplaying') {
-            const player = getMusicPlayer(guild.id);
-            const track = getCurrentTrack(player);
-            if (!player || !track) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            await interaction.reply({ content: `🎶 تعمل الآن: **${track.title}**\n⏱️ ${formatTrackLength(track.length)}` });
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            await interaction.reply({ content: `🎶 تعمل الآن: **${entry.title}**\n🔗 ${entry.url}` });
         }
         // --------------------------------------------------------
         else {
