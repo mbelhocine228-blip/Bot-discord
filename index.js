@@ -6,6 +6,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
+const ytSearch = require('yt-search');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -201,9 +202,12 @@ const commands = [
         .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
         .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     // ---- Music commands ----
-    new SlashCommandBuilder().setName('play').setDescription('تشغيل أغنية في القناة الصوتية، أو عرض قائمة للاختيار').addStringOption(opt => opt.setName('url').setDescription('رابط يوتيوب (اختياري)')),
+    new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
     new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
     new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
+    new SlashCommandBuilder().setName('pause').setDescription('إيقاف الموسيقى مؤقتاً'),
+    new SlashCommandBuilder().setName('resume').setDescription('استكمال الموسيقى'),
+    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض الأغنية التي تعمل حالياً'),
     // -------------------------
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -217,6 +221,9 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
+    for (const guild of client.guilds.cache.values()) {
+        await brandBotInGuild(guild);
+    }
     try {
         await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
         console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
@@ -358,20 +365,38 @@ client.on('messageCreate', async message => {
 // ==========================================================================
 
 client.on('guildMemberAdd', member => {
-    const config = serverConfigs.get(member.guild.id);
-    if (!config) return;
+    const config = serverConfigs.get(member.guild.id) || getDefaultConfig(member.guild.id);
+    const channel = config.notifications.welcomeChannel
+        ? member.guild.channels.cache.get(config.notifications.welcomeChannel)
+        : member.guild.systemChannel;
 
-    if (config.notifications.welcomeChannel) {
-        const channel = member.guild.channels.cache.get(config.notifications.welcomeChannel);
-        if (channel) {
-            const welcomeText = config.notifications.welcomeMessage.replace('{user}', `<@${member.id}>`);
-            channel.send(welcomeText).catch(() => {});
-        }
+    if (channel && channel.isTextBased()) {
+        const welcomeText = (config.notifications.welcomeMessage || 'أهلاً {user} نورت سيرفرنا!')
+            .replace('{user}', `<@${member.id}>`);
+        const embed = new EmbedBuilder()
+            .setColor(config.utility.embedColor || '#FFD700')
+            .setTitle('👋 RKS • عضو جديد')
+            .setDescription(welcomeText)
+            .addFields({ name: '👥 عدد الأعضاء', value: `${member.guild.memberCount}`, inline: true })
+            .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+            .setTimestamp();
+        channel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
     }
 
     if (config.roles.autorole) {
         member.roles.add(config.roles.autorole).catch(err => console.log("Failed to assign autorole:", err));
     }
+});
+
+async function brandBotInGuild(guild) {
+    const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!me || !me.manageable) return;
+    const nickname = `RKS • ${guild.name}`.slice(0, 32);
+    if (me.nickname !== nickname) await me.setNickname(nickname).catch(() => {});
+}
+
+client.on('guildCreate', guild => {
+    brandBotInGuild(guild).catch(() => {});
 });
 
 app.post('/control/:guildId/commands/save', (req, res) => {
@@ -949,6 +974,49 @@ const SONG_CATALOG = [
 ];
 // --------------------------------------------------------------------------
 
+async function findYouTubeTrack(query) {
+    if (ytdl.validateURL(query)) return { title: 'رابط يوتيوب', url: query };
+    const result = await ytSearch(query);
+    const video = result.videos && result.videos[0];
+    return video ? { title: video.title, url: video.url } : null;
+}
+
+function stopVoicePlayer(guildId) {
+    const entry = voicePlayers.get(guildId);
+    if (!entry) return false;
+    try { entry.player.stop(true); } catch (e) {}
+    try { entry.connection.destroy(); } catch (e) {}
+    voicePlayers.delete(guildId);
+    return true;
+}
+
+async function playYouTubeTrack(voiceChannel, track) {
+    stopVoicePlayer(voiceChannel.guild.id);
+    const connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: voiceChannel.guild.id,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator
+    });
+    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+    const stream = ytdl(track.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+    const resource = createAudioResource(stream);
+    connection.subscribe(player);
+    player.play(resource);
+
+    const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now() };
+    voicePlayers.set(voiceChannel.guild.id, entry);
+    const cleanup = () => {
+        const current = voicePlayers.get(voiceChannel.guild.id);
+        if (current && current.player === player) {
+            try { current.connection.destroy(); } catch (e) {}
+            voicePlayers.delete(voiceChannel.guild.id);
+        }
+    };
+    player.once(AudioPlayerStatus.Idle, cleanup);
+    player.once('error', error => { console.error('Music player error:', error); cleanup(); });
+    return entry;
+}
+
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         // Ticket buttons
@@ -1435,79 +1503,46 @@ client.on('interactionCreate', async interaction => {
         }
         // ---------------- Music commands handlers ----------------
         else if (commandName === 'play') {
-            const url = options.getString('url');
+            const query = options.getString('query', true).trim();
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
-
-            if (url) {
-                if (!ytdl.validateURL(url)) return interaction.reply({ content: '❌ الرابط غير صالح للتشغيل حالياً.', ephemeral: true });
-                await interaction.deferReply({ ephemeral: true });
-                try {
-                    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                    const resource = createAudioResource(stream);
-                    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-                    player.play(resource);
-
-                    const connection = joinVoiceChannel({
-                        channelId: voiceChannel.id,
-                        guildId: voiceChannel.guild.id,
-                        adapterCreator: voiceChannel.guild.voiceAdapterCreator
-                    });
-
-                    connection.subscribe(player);
-                    voicePlayers.set(voiceChannel.guild.id, { connection, player });
-
-                    player.on(AudioPlayerStatus.Idle, () => {
-                        try {
-                            const entry = voicePlayers.get(voiceChannel.guild.id);
-                            if (entry && entry.connection) entry.connection.destroy();
-                        } catch (e) {}
-                        voicePlayers.delete(voiceChannel.guild.id);
-                    });
-
-                    await interaction.editReply({ content: `▶️ تم تشغيل الأغنية الآن في ${voiceChannel}` });
-                } catch (err) {
-                    console.error(err);
-                    await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الرابط.' });
-                }
-            } else {
-                // show catalog buttons
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[0].id).setLabel(SONG_CATALOG[0].title).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[1].id).setLabel(SONG_CATALOG[1].title).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[2].id).setLabel(SONG_CATALOG[2].title).setStyle(ButtonStyle.Primary)
-                );
-                const embed = new EmbedBuilder()
-                    .setTitle('📜 كتالوج الأغاني - اختر أغنية للتشغيل')
-                    .setDescription('اضغط على الزر الخاص بالأغنية التي تود تشغيلها في قناتك الصوتية.')
-                    .setColor('#FFD700');
-                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const track = await findYouTubeTrack(query);
+                if (!track) return interaction.editReply({ content: `❌ لم أجد نتائج في يوتيوب عن: **${query}**` });
+                await playYouTubeTrack(voiceChannel, track);
+                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من يوتيوب الآن في ${voiceChannel}\n🔗 ${track.url}` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ تعذر البحث أو تشغيل الأغنية من يوتيوب حالياً.' });
             }
         }
         else if (commandName === 'stop') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
-            try {
-                entry.player.stop(true);
-                voicePlayers.delete(guild.id);
-                if (entry.connection) entry.connection.destroy();
-                await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
-            } catch (err) {
-                console.error(err);
-                await interaction.reply({ content: '❌ حدث خطأ أثناء محاولة الإيقاف.', ephemeral: true });
-            }
+            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
+            stopVoicePlayer(guild.id);
+            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
         }
         else if (commandName === 'leave') {
+            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
+            stopVoicePlayer(guild.id);
+            await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
+        }
+        else if (commandName === 'pause') {
             const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
-            try {
-                if (entry.connection) entry.connection.destroy();
-                voicePlayers.delete(guild.id);
-                await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
-            } catch (err) {
-                console.error(err);
-                await interaction.reply({ content: '❌ خطأ أثناء الخروج من القناة.', ephemeral: true });
-            }
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            entry.player.pause();
+            await interaction.reply({ content: '⏸️ تم إيقاف الموسيقى مؤقتاً.', ephemeral: true });
+        }
+        else if (commandName === 'resume') {
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
+            entry.player.unpause();
+            await interaction.reply({ content: '▶️ تم استكمال الموسيقى.', ephemeral: true });
+        }
+        else if (commandName === 'nowplaying') {
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
+            await interaction.reply({ content: `🎶 تعمل الآن: **${entry.title}**\n🔗 ${entry.url}` });
         }
         // --------------------------------------------------------
         else {
