@@ -4,8 +4,10 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
+const { spawn } = require('child_process');
+const youtubeDl = require('youtube-dl-exec');
+const ffmpegPath = require('ffmpeg-static');
 const ytSearch = require('yt-search');
 
 const app = express();
@@ -975,7 +977,8 @@ const SONG_CATALOG = [
 // --------------------------------------------------------------------------
 
 async function findYouTubeTrack(query) {
-    if (ytdl.validateURL(query)) return { title: 'رابط يوتيوب', url: query };
+    const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
+    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query };
     const results = await ytSearch(query);
     const video = results && results.videos && results.videos[0];
     return video ? { title: video.title, url: video.url } : null;
@@ -992,35 +995,64 @@ function stopVoicePlayer(guildId) {
 
 async function playYouTubeTrack(voiceChannel, track) {
     stopVoicePlayer(voiceChannel.guild.id);
+
     const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: voiceChannel.guild.id,
         adapterCreator: voiceChannel.guild.voiceAdapterCreator
     });
-    await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-    const stream = ytdl(track.url, {
-        filter: 'audioonly',
-        quality: 'highestaudio',
-        highWaterMark: 1 << 25
-    });
-    const { stream: probedStream, type } = await demuxProbe(stream);
-    const resource = createAudioResource(probedStream, { inputType: type });
-    connection.subscribe(player);
-    player.play(resource);
 
-    const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now() };
-    voicePlayers.set(voiceChannel.guild.id, entry);
-    const cleanup = () => {
-        const current = voicePlayers.get(voiceChannel.guild.id);
-        if (current && current.player === player) {
-            try { current.connection.destroy(); } catch (e) {}
-            voicePlayers.delete(voiceChannel.guild.id);
-        }
-    };
-    player.once(AudioPlayerStatus.Idle, cleanup);
-    player.once('error', error => { console.error('Music player error:', error); cleanup(); });
-    return entry;
+    let youtubeProcess;
+    let ffmpegProcess;
+    try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+        youtubeProcess = youtubeDl.exec(track.url, {
+            output: '-',
+            format: 'bestaudio/best',
+            noPlaylist: true,
+            quiet: true,
+            noWarnings: true
+        }, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        ffmpegProcess = spawn(ffmpegPath, [
+            '-hide_banner', '-loglevel', 'error',
+            '-i', 'pipe:0',
+            '-f', 's16le',
+            '-ar', '48000',
+            '-ac', '2',
+            'pipe:1'
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        youtubeProcess.stdout.pipe(ffmpegProcess.stdin);
+        youtubeProcess.stderr.on('data', data => console.error('yt-dlp:', data.toString().trim()));
+        ffmpegProcess.stderr.on('data', data => console.error('ffmpeg:', data.toString().trim()));
+
+        const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
+        const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+        connection.subscribe(player);
+        player.play(resource);
+
+        const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now(), youtubeProcess, ffmpegProcess };
+        voicePlayers.set(voiceChannel.guild.id, entry);
+
+        const cleanup = () => {
+            const current = voicePlayers.get(voiceChannel.guild.id);
+            if (current && current.player === player) {
+                try { youtubeProcess.kill('SIGKILL'); } catch (e) {}
+                try { ffmpegProcess.kill('SIGKILL'); } catch (e) {}
+                try { current.connection.destroy(); } catch (e) {}
+                voicePlayers.delete(voiceChannel.guild.id);
+            }
+        };
+        player.once(AudioPlayerStatus.Idle, cleanup);
+        player.once('error', error => { console.error('Music player error:', error); cleanup(); });
+        return entry;
+    } catch (error) {
+        try { youtubeProcess?.kill('SIGKILL'); } catch (e) {}
+        try { ffmpegProcess?.kill('SIGKILL'); } catch (e) {}
+        try { connection.destroy(); } catch (e) {}
+        throw error;
+    }
 }
 
 client.on('interactionCreate', async interaction => {
