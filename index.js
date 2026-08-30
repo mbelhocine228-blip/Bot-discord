@@ -5,7 +5,7 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
-const ytdl = require('ytdl-core');
+const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -28,53 +28,49 @@ const serverConfigs = new Map();
 // Voice players per guild
 const voicePlayers = new Map(); // guildId -> { connection, player }
 
-// ==================== إعدادات ميزة الذكاء الاصطناعي (Claude) ====================
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+// ==================== إعدادات ميزة الذكاء الاصطناعي (Gemini) ====================
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const AI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const AI_SYSTEM_PROMPT = `أنت مساعد ذكاء اصطناعي داخل بوت ديسكورد اسمه "RKS POWER". 
 جاوب بشكل واضح، مفيد، ومختصر قدر الإمكان، وبنفس لغة المستخدم (عربي أو إنجليزي).`;
-const AI_MAX_HISTORY = 20; // أقصى عدد رسائل نحتفظو بيها فذاكرة كل قناة
+const AI_MAX_HISTORY = 20; // أقصى عدد رسائل نحتفظو بيها فذاكرة كل قناة (user+model)
 
 const aiChannels = new Map();        // userId -> channelId (القناة الخاصة ديال كل مستخدم)
-const aiConversations = new Map();   // channelId -> [{role, content}, ...]
+const aiConversations = new Map();   // channelId -> [{role: 'user'|'model', parts: [{text}]}, ...]
 
 async function askClaude(channelId, userMessage) {
-    if (!ANTHROPIC_API_KEY) {
-        return '⚠️ ما تعرفتش على مفتاح Anthropic API. تأكد من إضافة `ANTHROPIC_API_KEY` فمتغيرات البيئة (Environment Variables) فـ Render.';
+    if (!GEMINI_API_KEY) {
+        return '⚠️ ما تعرفتش على مفتاح Gemini API. تأكد من إضافة `GEMINI_API_KEY` فمتغيرات البيئة (Environment Variables) فـ Render.';
     }
 
     const history = aiConversations.get(channelId) || [];
-    history.push({ role: 'user', content: userMessage });
+    history.push({ role: 'user', parts: [{ text: userMessage }] });
 
     try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+        const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: AI_MODEL,
-                max_tokens: 1024,
-                system: AI_SYSTEM_PROMPT,
-                messages: history
+                contents: history,
+                systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+                generationConfig: { maxOutputTokens: 1024 }
             })
         });
 
         if (!response.ok) {
             const errText = await response.text().catch(() => '');
-            console.error('Anthropic API error:', response.status, errText);
+            console.error('Gemini API error:', response.status, errText);
             return `❌ حدث خطأ فالاتصال بالذكاء الاصطناعي (كود ${response.status}). تأكد من صلاحية المفتاح والرصيد المتوفر.`;
         }
 
         const data = await response.json();
-        const reply = (data.content || [])
-            .filter(block => block.type === 'text')
-            .map(block => block.text)
+        const reply = (data.candidates?.[0]?.content?.parts || [])
+            .map(p => p.text)
+            .filter(Boolean)
             .join('\n') || '⚠️ ما توصلتش بجواب واضح من الذكاء الاصطناعي.';
 
-        history.push({ role: 'assistant', content: reply });
+        history.push({ role: 'model', parts: [{ text: reply }] });
         while (history.length > AI_MAX_HISTORY) history.shift();
         aiConversations.set(channelId, history);
 
@@ -1674,8 +1670,8 @@ if (!process.env.DISCORD_TOKEN) {
 if (!process.env.DISCORD_CLIENT_SECRET) {
     console.warn('⚠️ متغير البيئة DISCORD_CLIENT_SECRET غير موجود — تسجيل الدخول عبر لوحة التحكم (OAuth2) لن يعمل.');
 }
-if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('⚠️ متغير البيئة ANTHROPIC_API_KEY غير موجود — أمر /ai لن يعمل حتى تضيفه.');
+if (!process.env.GEMINI_API_KEY) {
+    console.warn('⚠️ متغير البيئة GEMINI_API_KEY غير موجود — أمر /ai لن يعمل حتى تضيفه.');
 }
 
 client.login(process.env.DISCORD_TOKEN);
