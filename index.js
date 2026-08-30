@@ -6,6 +6,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
 const ytSearch = require('yt-search');
+const ytdl = require('@distube/ytdl-core');
 const { spawn } = require('child_process');
 const youtubeDl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
@@ -15,6 +16,10 @@ const { Kazagumo } = require('kazagumo');
 
 const app = express();
 app.set('trust proxy', 1);
+const DISCORD_TOKEN = DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const AI_CHANNEL_PREFIX = 'ai-private:';
+const aiSessions = new Map();
 
 const client = new Client({ 
     intents: [
@@ -244,10 +249,16 @@ const commands = [
     new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
-    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard')
+    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard'),
+    new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة مع مساعد البرمجة')
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+if (!DISCORD_TOKEN) {
+    console.error('Missing DISCORD_TOKEN or DISCORD_BOT_TOKEN');
+    process.exit(1);
+}
+
+const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     for (const guild of client.guilds.cache.values()) {
@@ -1025,6 +1036,60 @@ function getCurrentTrack(player) {
     return player && (player.queue.current || player.queue[0]);
 }
 
+
+// ==================== AI coding private channels ====================
+function splitDiscordMessage(text) {
+    const chunks = [];
+    let rest = String(text || '');
+    while (rest.length > 1900) {
+        let cut = rest.lastIndexOf('\n', 1900);
+        if (cut < 500) cut = rest.lastIndexOf(' ', 1900);
+        if (cut < 500) cut = 1900;
+        chunks.push(rest.slice(0, cut));
+        rest = rest.slice(cut).trimStart();
+    }
+    if (rest) chunks.push(rest);
+    return chunks.length ? chunks : ['لم أستطع توليد رد الآن.'];
+}
+
+async function askCodingAssistant(channelId, content) {
+    const history = aiSessions.get(channelId) || [];
+    history.push({ role: 'user', content });
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + OPENAI_API_KEY },
+        body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            max_tokens: 2000,
+            messages: [
+                { role: 'system', content: 'أنت مساعد برمجة خبير داخل قناة Discord خاصة. اكتب أكوادًا قابلة للنسخ، اشرح باختصار، صحح الأخطاء، وساعد في frontend وbackend وDiscord وGitHub وقواعد البيانات. لا تدّع أنك شغلت كودًا أو عدّلت ملفات لم تعدّلها فعليًا.' },
+                ...history.slice(-20)
+            ]
+        })
+    });
+    if (!response.ok) throw new Error('OpenAI request failed: ' + response.status);
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content?.trim() || 'لم أستطع توليد رد الآن.';
+    history.push({ role: 'assistant', content: answer });
+    aiSessions.set(channelId, history.slice(-20));
+    return answer;
+}
+
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
+    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
+    if (!OPENAI_API_KEY) return message.reply('أضف OPENAI_API_KEY في إعدادات Render أولاً.');
+    try {
+        if ('sendTyping' in message.channel) await message.channel.sendTyping();
+        const answer = await askCodingAssistant(message.channel.id, message.content);
+        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
+    } catch (error) {
+        console.error('AI channel error:', error.message);
+        await message.reply('تعذر الرد من الذكاء الاصطناعي الآن. تحقق من OPENAI_API_KEY.');
+    }
+});
+// ======================================================================
+
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         // Ticket buttons
@@ -1119,7 +1184,26 @@ client.on('interactionCreate', async interaction => {
 
     try {
         // ... (existing commands handlers remain unchanged)
-        if (commandName === 'clear') {
+        if (commandName === 'private') {
+            if (!guild) return interaction.reply({ content: 'هذا الأمر يعمل داخل السيرفر فقط.', ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
+            const topic = AI_CHANNEL_PREFIX + interaction.user.id;
+            const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.topic === topic);
+            if (existing) return interaction.editReply({ content: 'قناتك موجودة بالفعل: ' + existing });
+            const aiChannel = await guild.channels.create({
+                name: ('ai-' + interaction.user.username).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90) || 'ai-private',
+                type: ChannelType.GuildText,
+                topic,
+                permissionOverwrites: [
+                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }
+                ]
+            });
+            await aiChannel.send('مرحبًا، هذه قناتك الخاصة مع مساعد البرمجة. أرسل سؤالك أو الكود مباشرة.');
+            return interaction.editReply({ content: 'تم فتح قناتك الخاصة: ' + aiChannel });
+        }
+        else if (commandName === 'clear') {
             const count = options.getInteger('count');
             if (count < 1 || count > 100) {
                 return interaction.reply({ content: '❌ يجب تحديد عدد رسائل بين 1 و 100 للحذف.', ephemeral: true });
@@ -1575,7 +1659,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
