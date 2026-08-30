@@ -4,76 +4,11 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
-const ytSearch = require('yt-search');
-const { spawn } = require('child_process');
-const youtubeDl = require('youtube-dl-exec');
-const ffmpegPath = require('ffmpeg-static');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+const ytdl = require('ytdl-core');
 
 const app = express();
 app.set('trust proxy', 1);
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
-if (!DISCORD_TOKEN) { console.error('DISCORD_TOKEN is missing'); process.exit(1); }
-const AI_CHANNEL_PREFIX = 'ai-private:';
-const aiSessions = new Map();
-
-function getAiProvider() {
-    const clean = value => String(value || '').trim().replace(/^['"]|['"]$/g, '');
-    return { geminiKey: clean(process.env.GEMINI_API_KEY), openAiKey: clean(process.env.OPENAI_API_KEY) };
-}
-
-async function askCodingAssistant(channelId, content) {
-    const provider = getAiProvider();
-    if (!provider.geminiKey && !provider.openAiKey) throw new Error('AI_KEY_MISSING');
-    const history = aiSessions.get(channelId) || [];
-    history.push({ role: 'user', content });
-    const systemPrompt = 'أنت مساعد برمجة خبير داخل قناة Discord خاصة. اكتب أكوادًا قابلة للنسخ، اشرح باختصار، صحح الأخطاء، وساعد في frontend وbackend وDiscord وGitHub وقواعد البيانات. لا تدّع أنك شغلت كودًا أو عدّلت ملفات لم تعدّلها فعليًا.';
-    let answer;
-    if (provider.geminiKey) {
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(provider.geminiKey), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                contents: history.slice(-20).map(item => ({ role: item.role === 'assistant' ? 'model' : 'user', parts: [{ text: item.content }] })),
-                generationConfig: { maxOutputTokens: 2000 }
-            })
-        });
-        if (!response.ok) { const errorBody = await response.text(); throw new Error('Gemini ' + response.status + ': ' + errorBody.slice(0, 300)); }
-        const data = await response.json();
-        answer = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
-    } else {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + provider.openAiKey },
-            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 2000, messages: [{ role: 'system', content: systemPrompt }, ...history.slice(-20)] })
-        });
-        if (!response.ok) { const errorBody = await response.text(); throw new Error('OpenAI ' + response.status + ': ' + errorBody.slice(0, 300)); }
-        const data = await response.json();
-        answer = data.choices?.[0]?.message?.content?.trim();
-    }
-    answer = answer || 'لم أستطع توليد رد الآن.';
-    history.push({ role: 'assistant', content: answer });
-    aiSessions.set(channelId, history.slice(-20));
-    return answer;
-}
-
-function splitDiscordMessage(text) {
-    const chunks = [];
-    let rest = String(text || '');
-    while (rest.length > 1900) {
-        let cut = rest.lastIndexOf('\n', 1900);
-        if (cut < 500) cut = rest.lastIndexOf(' ', 1900);
-        if (cut < 500) cut = 1900;
-        chunks.push(rest.slice(0, cut));
-        rest = rest.slice(cut).trimStart();
-    }
-    if (rest) chunks.push(rest);
-    return chunks.length ? chunks : ['لم أستطع توليد رد الآن.'];
-}
-
-
-
 
 const client = new Client({ 
     intents: [
@@ -92,6 +27,64 @@ const serverConfigs = new Map();
 
 // Voice players per guild
 const voicePlayers = new Map(); // guildId -> { connection, player }
+
+// ==================== إعدادات ميزة الذكاء الاصطناعي (Claude) ====================
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const AI_SYSTEM_PROMPT = `أنت مساعد ذكاء اصطناعي داخل بوت ديسكورد اسمه "RKS POWER". 
+جاوب بشكل واضح، مفيد، ومختصر قدر الإمكان، وبنفس لغة المستخدم (عربي أو إنجليزي).`;
+const AI_MAX_HISTORY = 20; // أقصى عدد رسائل نحتفظو بيها فذاكرة كل قناة
+
+const aiChannels = new Map();        // userId -> channelId (القناة الخاصة ديال كل مستخدم)
+const aiConversations = new Map();   // channelId -> [{role, content}, ...]
+
+async function askClaude(channelId, userMessage) {
+    if (!ANTHROPIC_API_KEY) {
+        return '⚠️ ما تعرفتش على مفتاح Anthropic API. تأكد من إضافة `ANTHROPIC_API_KEY` فمتغيرات البيئة (Environment Variables) فـ Render.';
+    }
+
+    const history = aiConversations.get(channelId) || [];
+    history.push({ role: 'user', content: userMessage });
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: AI_MODEL,
+                max_tokens: 1024,
+                system: AI_SYSTEM_PROMPT,
+                messages: history
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            console.error('Anthropic API error:', response.status, errText);
+            return `❌ حدث خطأ فالاتصال بالذكاء الاصطناعي (كود ${response.status}). تأكد من صلاحية المفتاح والرصيد المتوفر.`;
+        }
+
+        const data = await response.json();
+        const reply = (data.content || [])
+            .filter(block => block.type === 'text')
+            .map(block => block.text)
+            .join('\n') || '⚠️ ما توصلتش بجواب واضح من الذكاء الاصطناعي.';
+
+        history.push({ role: 'assistant', content: reply });
+        while (history.length > AI_MAX_HISTORY) history.shift();
+        aiConversations.set(channelId, history);
+
+        return reply;
+    } catch (err) {
+        console.error('AI request failed:', err);
+        return '❌ تعذر الاتصال بخدمة الذكاء الاصطناعي حالياً، حاول مرة أخرى بعد قليل.';
+    }
+}
+// ===================================================================================
 
  // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
 const SPAM_LIMIT = 5;         
@@ -149,7 +142,7 @@ function getGuildFeatures(guildId) {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({ 
-    secret: 'rks-koya-master-secret-999', 
+    secret: process.env.SESSION_SECRET || 'change-me-please', 
     resave: false, 
     saveUninitialized: false,
     cookie: { secure: false, httpOnly: true, sameSite: 'lax' }
@@ -158,10 +151,12 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1171579175635800175';
+
 passport.use(new DiscordStrategy({
-    clientID: '1171579175635800175',         
-    clientSecret: process.env.DISCORD_CLIENT_SECRET, 
-    callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
+    clientID: DISCORD_CLIENT_ID,
+    clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    callbackURL: process.env.DISCORD_CALLBACK_URL || 'https://bot-discord-g9r5.onrender.com/callback',
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => {
     return done(null, profile);
@@ -174,7 +169,7 @@ app.get('/login', passport.authenticate('discord'));
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
-const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
+const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&permissions=8&response_type=code&redirect_uri=${encodeURIComponent(process.env.DISCORD_CALLBACK_URL || 'https://bot-discord-g9r5.onrender.com/callback')}&integration_type=0&scope=bot+applications.commands`;
 
 const botCommandsList = [
     { name: 'ban', desc: 'حظر عضو من السيرفر' },
@@ -211,7 +206,6 @@ const botCommandsList = [
     { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
     { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
     { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
-    { name: 'private', desc: 'فتح قناة خاصة مع مساعد البرمجة' },
     { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
 ];
 
@@ -267,12 +261,9 @@ const commands = [
         .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
         .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     // ---- Music commands ----
-    new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
+    new SlashCommandBuilder().setName('play').setDescription('تشغيل أغنية في القناة الصوتية، أو عرض قائمة للاختيار').addStringOption(opt => opt.setName('url').setDescription('رابط يوتيوب (اختياري)')),
     new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
     new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
-    new SlashCommandBuilder().setName('pause').setDescription('إيقاف الموسيقى مؤقتاً'),
-    new SlashCommandBuilder().setName('resume').setDescription('استكمال الموسيقى'),
-    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض الأغنية التي تعمل حالياً'),
     // -------------------------
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -280,18 +271,18 @@ const commands = [
     new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
-    new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة مع مساعد البرمجة'),
-    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard')
+    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard'),
+    // ---- AI command ----
+    new SlashCommandBuilder().setName('ai').setDescription('فتح قناة خاصة بك للدردشة مع الذكاء الاصطناعي (Claude)'),
+    new SlashCommandBuilder().setName('ai-reset').setDescription('مسح ذاكرة المحادثة الحالية مع الذكاء الاصطناعي فهاد القناة'),
+    // --------------------
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
-    for (const guild of client.guilds.cache.values()) {
-        await brandBotInGuild(guild);
-    }
     try {
-        await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
+        await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: commands });
         console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
     } catch (error) { console.error(error); }
 
@@ -329,7 +320,25 @@ client.once('ready', async () => {
 // ==================== معالج الرسائل ونظام الحماية المدمج المطور ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
-    
+
+    // ---- AI channel: forward message to Claude and reply, skip moderation ----
+    if (aiConversations.has(message.channel.id)) {
+        if (!message.content || message.content.trim().length === 0) return;
+        try {
+            await message.channel.sendTyping();
+            const reply = await askClaude(message.channel.id, message.content);
+            const chunks = reply.match(/[\s\S]{1,1900}/g) || [reply];
+            for (const chunk of chunks) {
+                await message.reply({ content: chunk });
+            }
+        } catch (err) {
+            console.error('AI channel reply failed:', err);
+            await message.reply({ content: '❌ حدث خطأ أثناء معالجة رسالتك.' }).catch(() => {});
+        }
+        return;
+    }
+    // ---------------------------------------------------------------------
+
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
@@ -431,38 +440,20 @@ client.on('messageCreate', async message => {
 // ==========================================================================
 
 client.on('guildMemberAdd', member => {
-    const config = serverConfigs.get(member.guild.id) || getDefaultConfig(member.guild.id);
-    const channel = config.notifications.welcomeChannel
-        ? member.guild.channels.cache.get(config.notifications.welcomeChannel)
-        : member.guild.systemChannel;
+    const config = serverConfigs.get(member.guild.id);
+    if (!config) return;
 
-    if (channel && channel.isTextBased()) {
-        const welcomeText = (config.notifications.welcomeMessage || 'أهلاً {user} نورت سيرفرنا!')
-            .replace('{user}', `<@${member.id}>`);
-        const embed = new EmbedBuilder()
-            .setColor(config.utility.embedColor || '#FFD700')
-            .setTitle('👋 RKS • عضو جديد')
-            .setDescription(welcomeText)
-            .addFields({ name: '👥 عدد الأعضاء', value: `${member.guild.memberCount}`, inline: true })
-            .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-            .setTimestamp();
-        channel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+    if (config.notifications.welcomeChannel) {
+        const channel = member.guild.channels.cache.get(config.notifications.welcomeChannel);
+        if (channel) {
+            const welcomeText = config.notifications.welcomeMessage.replace('{user}', `<@${member.id}>`);
+            channel.send(welcomeText).catch(() => {});
+        }
     }
 
     if (config.roles.autorole) {
         member.roles.add(config.roles.autorole).catch(err => console.log("Failed to assign autorole:", err));
     }
-});
-
-async function brandBotInGuild(guild) {
-    const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
-    if (!me || !me.manageable) return;
-    const nickname = `RKS • ${guild.name}`.slice(0, 32);
-    if (me.nickname !== nickname) await me.setNickname(nickname).catch(() => {});
-}
-
-client.on('guildCreate', guild => {
-    brandBotInGuild(guild).catch(() => {});
 });
 
 app.post('/control/:guildId/commands/save', (req, res) => {
@@ -1040,114 +1031,6 @@ const SONG_CATALOG = [
 ];
 // --------------------------------------------------------------------------
 
-async function findYouTubeTrack(query) {
-    const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
-    if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query, source: 'YouTube' };
-    const results = await ytSearch(query);
-    const video = results && results.videos && results.videos[0];
-    return video ? { title: video.title, url: video.url, source: 'YouTube' } : null;
-}
-
-async function findSoundCloudTrack(query) {
-    const isSoundCloudUrl = /^https?:\/\/(?:www\.)?soundcloud\.com\//i.test(query);
-    if (isSoundCloudUrl) return { title: 'رابط SoundCloud', url: query, source: 'SoundCloud' };
-    const result = await youtubeDl('scsearch1:' + query, { dumpSingleJson: true, skipDownload: true, flatPlaylist: true, noWarnings: true, quiet: true });
-    const track = result && ((result.entries && result.entries[0]) || result);
-    if (!track || !track.id) return null;
-    return { title: track.title || query, url: track.webpage_url || track.original_url, source: 'SoundCloud' };
-}
-
-function stopVoicePlayer(guildId) {
-    const entry = voicePlayers.get(guildId);
-    if (!entry) return false;
-    try { entry.player.stop(true); } catch (e) {}
-    try { entry.connection.destroy(); } catch (e) {}
-    voicePlayers.delete(guildId);
-    return true;
-}
-
-async function playYouTubeTrack(voiceChannel, track) {
-    stopVoicePlayer(voiceChannel.guild.id);
-
-    const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: voiceChannel.guild.id,
-        adapterCreator: voiceChannel.guild.voiceAdapterCreator
-    });
-
-    let youtubeProcess;
-    let ffmpegProcess;
-    try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-        youtubeProcess = youtubeDl.exec(track.url, {
-            output: '-',
-            format: 'bestaudio/best',
-            noPlaylist: true,
-            quiet: true,
-            noWarnings: true
-        }, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-        ffmpegProcess = spawn(ffmpegPath, [
-            '-hide_banner', '-loglevel', 'error',
-            '-i', 'pipe:0',
-            '-f', 's16le',
-            '-ar', '48000',
-            '-ac', '2',
-            'pipe:1'
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-        youtubeProcess.stdout.pipe(ffmpegProcess.stdin);
-        youtubeProcess.stderr.on('data', data => console.error('yt-dlp:', data.toString().trim()));
-        ffmpegProcess.stderr.on('data', data => console.error('ffmpeg:', data.toString().trim()));
-        youtubeProcess.on('error', error => console.error('yt-dlp process error:', error.message));
-        ffmpegProcess.on('error', error => console.error('ffmpeg process error:', error.message));
-        youtubeProcess.stdout.on('error', error => console.error('yt-dlp output error:', error.message));
-        ffmpegProcess.stdin.on('error', () => {});
-
-        const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
-        const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-        connection.subscribe(player);
-        player.play(resource);
-
-        const entry = { connection, player, title: track.title, url: track.url, voiceChannelId: voiceChannel.id, startedAt: Date.now(), youtubeProcess, ffmpegProcess };
-        voicePlayers.set(voiceChannel.guild.id, entry);
-
-        const cleanup = () => {
-            const current = voicePlayers.get(voiceChannel.guild.id);
-            if (current && current.player === player) {
-                try { youtubeProcess.kill('SIGKILL'); } catch (e) {}
-                try { ffmpegProcess.kill('SIGKILL'); } catch (e) {}
-                try { current.connection.destroy(); } catch (e) {}
-                voicePlayers.delete(voiceChannel.guild.id);
-            }
-        };
-        player.once(AudioPlayerStatus.Idle, cleanup);
-        player.once('error', error => { console.error('Music player error:', error); cleanup(); });
-        return entry;
-    } catch (error) {
-        try { youtubeProcess?.kill('SIGKILL'); } catch (e) {}
-        try { ffmpegProcess?.kill('SIGKILL'); } catch (e) {}
-        try { connection.destroy(); } catch (e) {}
-        throw error;
-    }
-}
-
-client.on('messageCreate', async message => {
-    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
-    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
-    const provider = getAiProvider();
-    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY أو OPENAI_API_KEY في Render ثم نفّذ Redeploy.');
-    try {
-        if ('sendTyping' in message.channel) await message.channel.sendTyping();
-        const answer = await askCodingAssistant(message.channel.id, message.content);
-        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
-    } catch (error) {
-        console.error('AI channel error:', error.message);
-        const messageText = /401|403/.test(error.message) ? 'مفتاح الذكاء الاصطناعي مرفوض أو منتهي. أنشئ مفتاحًا جديدًا وتأكد من تفعيله.' : 'خطأ من مزود الذكاء الاصطناعي: ' + error.message.slice(0, 180);
-        await message.reply(messageText).catch(() => {});
-    }
-});
-
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         // Ticket buttons
@@ -1235,33 +1118,28 @@ client.on('interactionCreate', async interaction => {
             }
             return;
         }
+
+        // Close AI channel button
+        if (interaction.customId && interaction.customId.startsWith('ai_close_')) {
+            const targetChannelId = interaction.customId.replace('ai_close_', '');
+            await interaction.reply({ content: '🗑️ سيتم إغلاق هاد المحادثة وحذف القناة خلال 5 ثواني...' });
+
+            for (const [uid, cid] of aiChannels.entries()) {
+                if (cid === targetChannelId) aiChannels.delete(uid);
+            }
+            aiConversations.delete(targetChannelId);
+
+            setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
+            return;
+        }
     }
 
     if (!interaction.isChatInputCommand()) return;
-    const { commandName, options, member, guild, channel } = interaction;
+    const { commandName, options, member, guild, channel, user } = interaction;
 
     try {
         // ... (existing commands handlers remain unchanged)
-        if (commandName === 'private') {
-            if (!guild) return interaction.reply({ content: 'هذا الأمر يعمل داخل السيرفر فقط.', ephemeral: true });
-            await interaction.deferReply({ ephemeral: true });
-            const topic = AI_CHANNEL_PREFIX + interaction.user.id;
-            const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.topic === topic);
-            if (existing) return interaction.editReply({ content: 'قناتك موجودة بالفعل: ' + existing });
-            const aiChannel = await guild.channels.create({
-                name: ('ai-' + interaction.user.username).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90) || 'ai-private',
-                type: ChannelType.GuildText,
-                topic,
-                permissionOverwrites: [
-                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }
-                ]
-            });
-            await aiChannel.send('مرحبًا، هذه قناتك الخاصة مع مساعد البرمجة. أرسل سؤالك أو الكود مباشرة.');
-            return interaction.editReply({ content: 'تم فتح قناتك الخاصة: ' + aiChannel });
-        }
-        else if (commandName === 'clear') {
+        if (commandName === 'clear') {
             const count = options.getInteger('count');
             if (count < 1 || count > 100) {
                 return interaction.reply({ content: '❌ يجب تحديد عدد رسائل بين 1 و 100 للحذف.', ephemeral: true });
@@ -1651,64 +1529,133 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
         }
+        // ---------------- AI command handler ----------------
+        else if (commandName === 'ai') {
+            await interaction.deferReply({ ephemeral: true });
+
+            const existingChannelId = aiChannels.get(user.id);
+            if (existingChannelId) {
+                const existingChannel = guild.channels.cache.get(existingChannelId);
+                if (existingChannel) {
+                    return interaction.editReply({ content: `📌 عندك قناة مفتوحة معانا بالفعل: ${existingChannel}` });
+                }
+                aiChannels.delete(user.id);
+            }
+
+            try {
+                const aiChannel = await guild.channels.create({
+                    name: `ai-${user.username}`.toLowerCase().slice(0, 90),
+                    type: ChannelType.GuildText,
+                    permissionOverwrites: [
+                        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+                        { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
+                    ]
+                });
+
+                aiChannels.set(user.id, aiChannel.id);
+                aiConversations.set(aiChannel.id, []);
+
+                const closeRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`ai_close_${aiChannel.id}`).setLabel('🗑️ إغلاق المحادثة').setStyle(ButtonStyle.Danger)
+                );
+
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('🤖 مرحباً بك فقناتك الخاصة مع الذكاء الاصطناعي')
+                    .setDescription('هاد القناة خاصة بك وحدك، اكتب أي سؤال أو رسالة وغادي يجاوبك الذكاء الاصطناعي مباشرة.\nاستعمل `/ai-reset` باش تمسح ذاكرة المحادثة، أو زر "إغلاق المحادثة" باش تسكر القناة.')
+                    .setTimestamp();
+
+                await aiChannel.send({ content: `${user}`, embeds: [welcomeEmbed], components: [closeRow] });
+                await interaction.editReply({ content: `✅ تم إنشاء قناتك الخاصة: ${aiChannel}` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ تعذر إنشاء القناة. تأكد أن صلاحيات البوت تسمح بإنشاء قنوات (Manage Channels).' });
+            }
+        }
+        else if (commandName === 'ai-reset') {
+            if (!aiConversations.has(interaction.channel.id)) {
+                return interaction.reply({ content: '⚠️ هاد القناة ماشي قناة ذكاء اصطناعي.', ephemeral: true });
+            }
+            aiConversations.set(interaction.channel.id, []);
+            await interaction.reply({ content: '🧹 تم مسح ذاكرة المحادثة بنجاح.', ephemeral: true });
+        }
+        // ------------------------------------------------------
         // ---------------- Music commands handlers ----------------
         else if (commandName === 'play') {
-            const query = options.getString('query', true).trim();
-            await interaction.deferReply({ ephemeral: true });
+            const url = options.getString('url');
             const voiceChannel = member.voice.channel;
-            if (!voiceChannel) return interaction.editReply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.' });
-            if (!voiceChannel.joinable || !voiceChannel.speakable) {
-                return interaction.editReply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.' });
-            }
-            try {
-                let track = null;
-                try { track = await findYouTubeTrack(query); } catch (error) { console.error('YouTube search failed:', error.message); }
-                if (!track) {
-                    try { track = await findSoundCloudTrack(query); } catch (error) { console.error('SoundCloud search failed:', error.message); }
-                }
-                if (!track) return interaction.editReply({ content: `❌ لم أجد الأغنية في يوتيوب أو SoundCloud عن: **${query}**` });
+            if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
+
+            if (url) {
+                if (!ytdl.validateURL(url)) return interaction.reply({ content: '❌ الرابط غير صالح للتشغيل حالياً.', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
                 try {
-                    await playYouTubeTrack(voiceChannel, track);
-                } catch (firstError) {
-                    if (track.source !== 'YouTube') throw firstError;
-                    console.error('YouTube playback failed, trying SoundCloud:', firstError.message);
-                    track = await findSoundCloudTrack(query);
-                    if (!track) throw firstError;
-                    await playYouTubeTrack(voiceChannel, track);
+                    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+                    const resource = createAudioResource(stream);
+                    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+                    player.play(resource);
+
+                    const connection = joinVoiceChannel({
+                        channelId: voiceChannel.id,
+                        guildId: voiceChannel.guild.id,
+                        adapterCreator: voiceChannel.guild.voiceAdapterCreator
+                    });
+
+                    connection.subscribe(player);
+                    voicePlayers.set(voiceChannel.guild.id, { connection, player });
+
+                    player.on(AudioPlayerStatus.Idle, () => {
+                        try {
+                            const entry = voicePlayers.get(voiceChannel.guild.id);
+                            if (entry && entry.connection) entry.connection.destroy();
+                        } catch (e) {}
+                        voicePlayers.delete(voiceChannel.guild.id);
+                    });
+
+                    await interaction.editReply({ content: `▶️ تم تشغيل الأغنية الآن في ${voiceChannel}` });
+                } catch (err) {
+                    console.error(err);
+                    await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الرابط.' });
                 }
-                await interaction.editReply({ content: `▶️ تم تشغيل **${track.title}** من ${track.source} الآن في ${voiceChannel}\n🔗 ${track.url}` });
-            } catch (err) {
-                console.error('Music playback failed:', err);
-                const reason = String(err?.message || err || 'خطأ غير معروف').replace(/[\`\n]/g, ' ').slice(0, 240);
-                await interaction.editReply({ content: `❌ فشل تشغيل الأغنية. السبب: \`${reason}\`` });
+            } else {
+                // show catalog buttons
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[0].id).setLabel(SONG_CATALOG[0].title).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[1].id).setLabel(SONG_CATALOG[1].title).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[2].id).setLabel(SONG_CATALOG[2].title).setStyle(ButtonStyle.Primary)
+                );
+                const embed = new EmbedBuilder()
+                    .setTitle('📜 كتالوج الأغاني - اختر أغنية للتشغيل')
+                    .setDescription('اضغط على الزر الخاص بالأغنية التي تود تشغيلها في قناتك الصوتية.')
+                    .setColor('#FFD700');
+                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
             }
         }
         else if (commandName === 'stop') {
-            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
-            stopVoicePlayer(guild.id);
-            await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
+            try {
+                entry.player.stop(true);
+                voicePlayers.delete(guild.id);
+                if (entry.connection) entry.connection.destroy();
+                await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ حدث خطأ أثناء محاولة الإيقاف.', ephemeral: true });
+            }
         }
         else if (commandName === 'leave') {
-            if (!voicePlayers.has(guild.id)) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
-            stopVoicePlayer(guild.id);
-            await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
-        }
-        else if (commandName === 'pause') {
             const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            entry.player.pause();
-            await interaction.reply({ content: '⏸️ تم إيقاف الموسيقى مؤقتاً.', ephemeral: true });
-        }
-        else if (commandName === 'resume') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية متوقفة مؤقتاً.', ephemeral: true });
-            entry.player.unpause();
-            await interaction.reply({ content: '▶️ تم استكمال الموسيقى.', ephemeral: true });
-        }
-        else if (commandName === 'nowplaying') {
-            const entry = voicePlayers.get(guild.id);
-            if (!entry) return interaction.reply({ content: '❌ لا توجد أغنية تعمل حالياً.', ephemeral: true });
-            await interaction.reply({ content: `🎶 تعمل الآن: **${entry.title}**\n🔗 ${entry.url}` });
+            if (!entry) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
+            try {
+                if (entry.connection) entry.connection.destroy();
+                voicePlayers.delete(guild.id);
+                await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ خطأ أثناء الخروج من القناة.', ephemeral: true });
+            }
         }
         // --------------------------------------------------------
         else {
@@ -1720,7 +1667,18 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-client.login(DISCORD_TOKEN);
+if (!process.env.DISCORD_TOKEN) {
+    console.error('❌ متغير البيئة DISCORD_TOKEN غير موجود. أضفه فإعدادات Render (Environment) وأعد التشغيل.');
+    process.exit(1);
+}
+if (!process.env.DISCORD_CLIENT_SECRET) {
+    console.warn('⚠️ متغير البيئة DISCORD_CLIENT_SECRET غير موجود — تسجيل الدخول عبر لوحة التحكم (OAuth2) لن يعمل.');
+}
+if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('⚠️ متغير البيئة ANTHROPIC_API_KEY غير موجود — أمر /ai لن يعمل حتى تضيفه.');
+}
+
+client.login(process.env.DISCORD_TOKEN);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
