@@ -4,7 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 const ytSearch = require('yt-search');
 
@@ -998,8 +998,13 @@ async function playYouTubeTrack(voiceChannel, track) {
         adapterCreator: voiceChannel.guild.voiceAdapterCreator
     });
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-    const stream = ytdl(track.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-    const resource = createAudioResource(stream);
+    const stream = ytdl(track.url, {
+        filter: format => format.hasAudio && !format.hasVideo && format.container === 'webm' && format.audioCodec === 'opus',
+        quality: 'highestaudio',
+        highWaterMark: 1 << 25
+    });
+    const { stream: probedStream, type } = await demuxProbe(stream);
+    const resource = createAudioResource(probedStream, { inputType: type });
     connection.subscribe(player);
     player.play(resource);
 
@@ -1506,6 +1511,10 @@ client.on('interactionCreate', async interaction => {
             const query = options.getString('query', true).trim();
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
+            const botPermissions = voiceChannel.permissionsFor(guild.members.me);
+            if (!botPermissions || !botPermissions.has(PermissionsBitField.Flags.Connect) || !botPermissions.has(PermissionsBitField.Flags.Speak)) {
+                return interaction.reply({ content: '❌ أحتاج صلاحية Connect و Speak في القناة الصوتية.', ephemeral: true });
+            }
             await interaction.deferReply({ ephemeral: true });
             try {
                 const track = await findYouTubeTrack(query);
