@@ -1014,7 +1014,7 @@ async function playYouTubeTrack(voiceChannel, track) {
     let youtubeProcess;
     let ffmpegProcess;
     try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
         youtubeProcess = youtubeDl.exec(track.url, {
             output: '-',
             format: 'bestaudio/best',
