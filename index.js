@@ -72,21 +72,7 @@ function splitDiscordMessage(text) {
     return chunks.length ? chunks : ['لم أستطع توليد رد الآن.'];
 }
 
-client.on('messageCreate', async message => {
-    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
-    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
-    const provider = getAiProvider();
-    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY أو OPENAI_API_KEY في Render ثم نفّذ Redeploy.');
-    try {
-        if ('sendTyping' in message.channel) await message.channel.sendTyping();
-        const answer = await askCodingAssistant(message.channel.id, message.content);
-        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
-    } catch (error) {
-        console.error('AI channel error:', error.message);
-        const messageText = /401|403/.test(error.message) ? 'مفتاح الذكاء الاصطناعي مرفوض أو منتهي. أنشئ مفتاحًا جديدًا وتأكد من تفعيله.' : 'خطأ من مزود الذكاء الاصطناعي: ' + error.message.slice(0, 180);
-        await message.reply(messageText).catch(() => {});
-    }
-});
+
 
 
 const client = new Client({ 
@@ -1145,6 +1131,22 @@ async function playYouTubeTrack(voiceChannel, track) {
         throw error;
     }
 }
+
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
+    if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
+    const provider = getAiProvider();
+    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY أو OPENAI_API_KEY في Render ثم نفّذ Redeploy.');
+    try {
+        if ('sendTyping' in message.channel) await message.channel.sendTyping();
+        const answer = await askCodingAssistant(message.channel.id, message.content);
+        for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
+    } catch (error) {
+        console.error('AI channel error:', error.message);
+        const messageText = /401|403/.test(error.message) ? 'مفتاح الذكاء الاصطناعي مرفوض أو منتهي. أنشئ مفتاحًا جديدًا وتأكد من تفعيله.' : 'خطأ من مزود الذكاء الاصطناعي: ' + error.message.slice(0, 180);
+        await message.reply(messageText).catch(() => {});
+    }
+});
 
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
