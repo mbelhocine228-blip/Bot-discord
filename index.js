@@ -16,7 +16,7 @@ const { Kazagumo } = require('kazagumo');
 
 const app = express();
 app.set('trust proxy', 1);
-const DISCORD_TOKEN = DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const AI_CHANNEL_PREFIX = 'ai-private:';
 const aiSessions = new Map();
