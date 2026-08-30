@@ -17,7 +17,7 @@ const { Kazagumo } = require('kazagumo');
 const app = express();
 app.set('trust proxy', 1);
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+function getOpenAiKey() { return (process.env.OPENAI_API_KEY || '').trim().replace(/^['\"]|['\"]$/g, ''); }
 const AI_CHANNEL_PREFIX = 'ai-private:';
 const aiSessions = new Map();
 
@@ -1053,11 +1053,13 @@ function splitDiscordMessage(text) {
 }
 
 async function askCodingAssistant(channelId, content) {
+    const apiKey = getOpenAiKey();
+    if (!apiKey) throw new Error('OPENAI_API_KEY is missing');
     const history = aiSessions.get(channelId) || [];
     history.push({ role: 'user', content });
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + OPENAI_API_KEY },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
         body: JSON.stringify({
             model: 'gpt-4o-mini',
             max_tokens: 2000,
@@ -1067,7 +1069,7 @@ async function askCodingAssistant(channelId, content) {
             ]
         })
     });
-    if (!response.ok) throw new Error('OpenAI request failed: ' + response.status);
+    if (!response.ok) { const errorBody = await response.text(); throw new Error('OpenAI request failed: ' + response.status + ' ' + errorBody.slice(0, 300)); }
     const data = await response.json();
     const answer = data.choices?.[0]?.message?.content?.trim() || 'لم أستطع توليد رد الآن.';
     history.push({ role: 'assistant', content: answer });
@@ -1078,14 +1080,14 @@ async function askCodingAssistant(channelId, content) {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
     if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
-    if (!OPENAI_API_KEY) return message.reply('أضف OPENAI_API_KEY في إعدادات Render أولاً.');
+    if (!getOpenAiKey()) return message.reply('المفتاح غير ظاهر للبوت. احفظ OPENAI_API_KEY في Render ثم نفّذ Redeploy يدوي.');
     try {
         if ('sendTyping' in message.channel) await message.channel.sendTyping();
         const answer = await askCodingAssistant(message.channel.id, message.content);
         for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
     } catch (error) {
         console.error('AI channel error:', error.message);
-        await message.reply('تعذر الرد من الذكاء الاصطناعي الآن. تحقق من OPENAI_API_KEY.');
+        await message.reply(error.message.includes('401') ? 'المفتاح مرفوض من OpenAI. أنشئ مفتاحًا جديدًا وتأكد من الرصيد/الفوترة.' : 'خطأ من OpenAI: ' + error.message.slice(0, 180));
     }
 });
 // ======================================================================
