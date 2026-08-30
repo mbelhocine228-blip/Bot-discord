@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Collection } = require('discord.js');
+Const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Collection } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -21,11 +21,11 @@ const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
 
-// ==================== إعدادات نظام السبام المتقدم ====================
-const SPAM_LIMIT = 5;         // عدد الرسائل القصوى المسموحة
-const SPAM_INTERVAL = 5000;   // خلال كم مللي ثانية (5 ثوانٍ)
-const ADMIN_CHANNEL_ID = '000000000000000000'; // استبدل الأصفار بـ آيدي روم الإداريين الخاصة بك
-const userMessageMap = new Map();
+// ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
+const SPAM_LIMIT = 5;         
+const SPAM_INTERVAL = 5000;   
+const ADMIN_CHANNEL_ID = '1527797722122555475'; 
+const spamTracker = new Map(); 
 // ===================================================================
 
 function getDefaultConfig(guildId) {
@@ -117,7 +117,7 @@ const botCommandsList = [
     { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
     { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
     { name: 'say', desc: 'تكرار الكلام عبر البوت' },
-    { name: 'announcement', desc: 'إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص' },
+    { name: 'announcement', desc: 'إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص' },
     { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
     { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
     { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
@@ -131,8 +131,9 @@ const botCommandsList = [
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
     { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
     { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
-    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت' },
+    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
+    { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
     { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
@@ -156,16 +157,20 @@ const commands = [
     new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder()
         .setName('announcement')
-        .setDescription('إرسال إعلان رسمي من إدارة الكلان مع صورة وروم مخصص')
+        .setDescription('إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addChannelOption(option =>
             option.setName('channel')
                 .setDescription('اختر الروم المراد إرسال الإعلان فيه')
                 .addChannelTypes(ChannelType.GuildText)
                 .setRequired(true))
+        .addStringOption(option =>
+            option.setName('message')
+                .setDescription('اكتب نص الإعلان المراد إرساله')
+                .setRequired(true))
         .addAttachmentOption(option =>
             option.setName('image')
-                .setDescription('اختر صورة الإعلان المراد إرفاقها')
+                .setDescription('اختر صورة الإعلان المراد إرفاقها (اختياري)')
                 .setRequired(false)),
     new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
     new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
@@ -182,6 +187,12 @@ const commands = [
     new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
     new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
     new SlashCommandBuilder().setName('eventsched').setDescription('جدولة سباق أو فعالية جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('event')
+        .setDescription('بدء مسابقة مع عد تنازلي حي للوقت (مثال: 0:01:30)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
+        .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
     new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -230,14 +241,13 @@ client.once('ready', async () => {
     }, 60 * 60 * 1000);
 });
 
-// ==================== معالج الرسائل ونظام الحماية المدمج ====================
+// ==================== معالج الرسائل ونظام الحماية المدمج المطور ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     
     const features = getGuildFeatures(message.guild.id);
     const config = serverConfigs.get(message.guild.id) || getDefaultConfig(message.guild.id);
 
-    // 1. فلترة الكلمات الممنوعة (Bad Words)
     if (config.moderation.badWords.some(word => message.content.toLowerCase().includes(word.toLowerCase()))) {
         try {
             await message.delete();
@@ -246,7 +256,6 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2. منع سبام الملفات والصور (Attachment Spam)
     if (features.attachmentspam && message.attachments.size > 0) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
             await message.delete().catch(() => {});
@@ -254,14 +263,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 3. فلترة الكلمات الإضافية (Censor)
-    const badWords = ["كلمة_ممنوعة_1", "كلمة_ممنوعة_2"];
-    if (features.censor && badWords.some(word => message.content.toLowerCase().includes(word))) {
-        await message.delete().catch(() => {});
-        return message.channel.send(`⚠️ ${message.author}, هذه الكلمة ممنوعة في السيرفر!`).then(m => setTimeout(() => m.delete().catch(()=>{}), 4000));
-    }
-
-    // 4. حماية الحروف الكبيرة (Caps Limit)
     if (features.capslimit && message.content.length > 8) {
         const letters = message.content.replace(/[^A-Za-z]/g, "");
         if (letters.length > 5) {
@@ -277,48 +278,70 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 5. نظام الحماية من السبام السريع وتنبيه الإداريين
     if (features.automod) {
-        if (!userMessageMap.has(message.author.id)) {
-            userMessageMap.set(message.author.id, { count: 1, lastMessageTime: Date.now() });
+        const userId = message.author.id;
+        const currentTime = Date.now();
+
+        if (!spamTracker.has(userId)) {
+            spamTracker.set(userId, { count: 1, firstMessageTimestamp: currentTime, warnings: 0 });
         } else {
-            const userData = userMessageMap.get(message.author.id);
-            const difference = Date.now() - userData.lastMessageTime;
-            if (difference < SPAM_INTERVAL) {
+            const userData = spamTracker.get(userId);
+            
+            if (currentTime - userData.firstMessageTimestamp < SPAM_INTERVAL) {
                 userData.count++;
-                userData.lastMessageTime = Date.now();
-                if (userData.count >= SPAM_LIMIT) {
+                
+                if (userData.count > SPAM_LIMIT) {
+                    userData.warnings++;
+                    const spamType = "إرسال رسائل متتالية بسرعة فائقة (Flood / Spam)";
+                    
                     try {
-                        await message.delete();
-                    } catch (e) {}
-
-                    try {
-                        const warningMsg = await message.channel.send(`${message.author.mention || message.author} **توقف عن إرسال الرسائل بسرعة (سبام)!** ⚠️`);
-                        setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
-                    } catch (e) {}
-
-                    // إرسال تنبيه لروم الإداريين المخصصة بخصوص الشخص الذي يسبام
-                    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID) || client.channels.cache.get(ADMIN_CHANNEL_ID);
-                    if (adminChannel) {
-                        await adminChannel.send(
-                            `🚨 **تنبيه سبام جديد!**\n` +
-                            `👤 **اسم العضو:** ${message.author.tag} (ID: \`${message.author.id}\`)\n` +
-                            `📍 **مكان المخالفة:** ${message.channel}\n` +
-                            `🛠️ **الحالة:** يقوم بإرسال رسائل متكررة وسريعة، يرجى التدخل واتخاذ الإجراء اللازم (باند/حظر).`
-                        ).catch(() => {});
+                        await message.author.send(`⚠️ **تنبيه:** لقد قمت بإرسال رسائل بسرعة كبيرة وتم اعتبارها سبام في سيرفر **${message.guild.name}**. يرجى التوقف عن ذلك تفادياً للعقوبة.`);
+                    } catch (err) {
+                        const warnMsg = await message.channel.send(`${message.author}, ⚠️ تنبيه: يرجى التوقف عن السبام!`);
+                        setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
                     }
 
+                    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID) || client.channels.cache.get(ADMIN_CHANNEL_ID);
+                    if (adminChannel) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#ff0000')
+                            .setTitle('🚨 تنبيه سبام مكتشف!')
+                            .addFields(
+                                { name: '👤 الشخص المخالف:', value: `${message.author.tag} (${message.author.id})`, inline: true },
+                                { name: '📍 الروم:', value: `${message.channel}`, inline: true },
+                                { name: '🔍 نوع السبام:', value: spamType, inline: false },
+                                { name: '⚠️ عدد التحذيرات الحالية:', value: `${userData.warnings}`, inline: true }
+                            )
+                            .setTimestamp();
+
+                        await adminChannel.send({ embeds: [embed] }).catch(() => {});
+                    }
+
+                    if (userData.warnings >= 3) {
+                        try {
+                            const member = await message.guild.members.fetch(userId);
+                            await member.timeout(5 * 60 * 1000, 'تكرار مخالفة السبام');
+                            
+                            if (adminChannel) {
+                                await adminChannel.send(`🔇 تم تطبيق عقوبة **الميوت (Timeout)** لمدة 5 دقائق على العضو ${message.author.tag} لتكراره السبام.`);
+                            }
+                            userData.warnings = 0;
+                        } catch (error) {
+                            console.error('فشل في تطبيق الميوت:', error);
+                        }
+                    }
+
+                    await message.delete().catch(() => {});
                     userData.count = 0;
+                    userData.firstMessageTimestamp = currentTime;
                     return;
                 }
             } else {
                 userData.count = 1;
-                userData.lastMessageTime = Date.now();
+                userData.firstMessageTimestamp = currentTime;
             }
         }
     }
-
-    await client.process_commands?.(message);
 });
 // ==========================================================================
 
@@ -751,7 +774,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 <p style="color:#b9bbbe; font-size:13px;">جدولة وتنظيم سباقات وفعاليات كلان RKS.</p>
             </div>
             <div class="section-box" style="font-size:13.5px;">
-                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة.</p>
+                <p>🔹 استخدم الأمر <code style="color:#FFD700;">/eventsched</code> لجدولة فعالية جديدة، أو <code style="color:#FFD700;">/event</code> لبدء مسابقة بعد تنازلي حي.</p>
             </div>
         `;
     } else if (section === 'moderation') {
@@ -1164,10 +1187,13 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'applysetup') {
             if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) 
                 return interaction.reply({ content: '❌ يتطلب صلاحية مسؤول.', ephemeral: true });
+            
             const embed = new EmbedBuilder()
                 .setTitle('📝 نموذج التقديم للانضمام إلى كلان RKS POWER')
                 .setDescription('تبي تنضم لكلان RKS؟ شروطنا واضحة:\n1. التفاعل المستمر وحضور مهام الكلان (Endurance & Duel).\n2. احترام الأعضاء والإدارة.\n3. اللعب النظيف والاحترافي في Racing Master.\n\nتواصل مع الإدارة أو افتح تذكرة للتقديم!')
-                .setColor('#FFD700');
+                .setColor('#FFD700')
+                .setTimestamp();
+            
             await channel.send({ embeds: [embed] });
             await interaction.reply({ content: '✅ تم إرسال نموذج التقديم بنجاح!', ephemeral: true });
         }
@@ -1184,6 +1210,64 @@ client.on('interactionCreate', async interaction => {
                 .setTimestamp();
             await channel.send({ content: '@here @everyone', embeds: [embed] });
             await interaction.reply({ content: '✅ تم جدولة الفعالية وإرسالها بنجاح!', ephemeral: true });
+        }
+        else if (commandName === 'event') {
+            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
+                return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
+
+            const title = options.getString('title');
+            const durationInput = options.getString('duration'); 
+
+            const parts = durationInput.split(':').map(Number);
+            let totalSeconds = 0;
+
+            if (parts.length === 3) {
+                totalSeconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+            } else if (parts.length === 2) {
+                totalSeconds = (parts[0] * 60) + parts[1];
+            } else {
+                totalSeconds = parts[0] || 60;
+            }
+
+            await interaction.reply({ content: '✅ تم بدء عداد المسابقة بنجاح!', ephemeral: true });
+
+            const formatTime = (secs) => {
+                const h = Math.floor(secs / 3600);
+                const m = Math.floor((secs % 3600) / 60);
+                const s = secs % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            };
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                .setDescription(`⏳ الوقت المتبقي لبدء المسابقة:\n# \`${formatTime(totalSeconds)}\``)
+                .setColor('#FFD700')
+                .setTimestamp();
+
+            const eventMessage = await channel.send({ content: '@here @everyone 🚨 **بدء العد التنازلي للمسابقة!**', embeds: [embed] });
+
+            const countdownInterval = setInterval(async () => {
+                totalSeconds--;
+
+                if (totalSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                    const finishedEmbed = new EmbedBuilder()
+                        .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                        .setDescription('🚀 **المسابقة الآن! انضم واشترك فوراً!** 🔥')
+                        .setColor('#23a55a')
+                        .setTimestamp();
+                    
+                    await eventMessage.edit({ content: '@here @everyone 🚨 **انتهى الوقت، المسابقة بدأت الآن!**', embeds: [finishedEmbed] }).catch(() => {});
+                } else {
+                    const updatedEmbed = new EmbedBuilder()
+                        .setTitle(`🎮 مسابقة / فعالية: ${title}`)
+                        .setDescription(`⏳ الوقت المتبقي لبدء المسابقة:\n# \`${formatTime(totalSeconds)}\``)
+                        .setColor('#FFD700')
+                        .setTimestamp();
+
+                    await eventMessage.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                }
+            }, 1000);
         }
         else if (commandName === 'rps') {
             const choice = options.getString('choice').toLowerCase();
@@ -1222,20 +1306,14 @@ client.on('interactionCreate', async interaction => {
             await interaction.deferReply({ ephemeral: true });
 
             const targetChannel = options.getChannel('channel');
+            const customMessage = options.getString('message');
             const imageAttachment = options.getAttachment('image');
 
             const embed = new EmbedBuilder()
-                .setColor('#1e2124')
+                .setColor('#FFD700')
                 .setTitle('🔥 إعلان رسمي من إدارة كلان 🏎️ RKS POWER 🔥')
-                .setDescription(
-                    '🏆 **Join RKS POWER Club!** 🏆\n\n' +
-                    'يا شباب، فعاليات ومهمات الكلان شعلت نار! 🔥 شدُو الهمة وخلونا نرفع اسم **RKS POWER** فوق في الترتيب 🏆\n\n' +
-                    '📍 **المهام الحالية:**\n' +
-                    '• **مهمات السباقات اليومية:** لا تفوتوا أي محاولة لجمع النقاط لصالح الكلان! 🏎️💨\n' +
-                    '• **فعاليات الكلان (Endurance & Duel):** شاركوا الآن وسجلوا حضوركم بقوة. ⏳ ⚡\n\n' +
-                    'كل نقطة تحسب وتفرق معنا في لفل الكلان والترتيب العام.\n' +
-                    'أدخلوا اللعبة الآن وخلصوا مهماتكم! 💪'
-                );
+                .setDescription(customMessage)
+                .setTimestamp();
 
             if (imageAttachment) {
                 embed.setImage(imageAttachment.url);
