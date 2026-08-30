@@ -96,7 +96,7 @@ app.use(passport.session());
 
 passport.use(new DiscordStrategy({
     clientID: '1171579175635800175',         
-    clientSecret: 'I1JZsvXEZ_L4iQjAlIMurRy-c_ikOecN', 
+    clientSecret: process.env.DISCORD_CLIENT_SECRET, 
     callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => {
