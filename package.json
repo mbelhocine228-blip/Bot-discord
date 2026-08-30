@@ -1,27 +1,23 @@
 {
   "name": "rks-power-bot",
   "version": "1.0.0",
-  "description": "Discord Bot and Web Dashboard for RKS Power Clan",
+  "description": "RKS POWER Discord Bot + Dashboard",
   "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@google/genai": "latest",
-    "discord.js": "^14.14.1",
-    "express": "^4.19.2",
-    "express-session": "^1.18.0",
+    "discord.js": "^14.16.3",
+    "@discordjs/voice": "^0.17.0",
+    "@discordjs/opus": "^0.9.0",
+    "libsodium-wrappers": "^0.7.15",
+    "ytdl-core": "^4.11.5",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
     "passport": "^0.7.0",
-    "passport-discord": "^0.1.4",
-    "@discordjs/voice": "^0.18.0",
-    "youtube-dl-exec": "^3.0.20",
-    "ffmpeg-static": "^5.2.0",
-    "yt-search": "^2.0.0",
-    "kazagumo": "^3.4.2",
-    "shoukaku": "^4.1.0",
-    "@distube/ytdl-core": "^4.16.12"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "passport-discord": "^0.1.4"
   }
 }
