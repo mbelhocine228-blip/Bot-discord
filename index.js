@@ -5,6 +5,7 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, demuxProbe, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
+const ytSearch = require('yt-search');
 const { spawn } = require('child_process');
 const youtubeDl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
@@ -979,19 +980,9 @@ async function findYouTubeTrack(query) {
     const isYouTubeUrl = /^https?:\/\/(?:www\.|music\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(query);
     if (isYouTubeUrl) return { title: 'رابط يوتيوب', url: query };
 
-    const result = await youtubeDl(`ytsearch1:${query}`, {
-        dumpSingleJson: true,
-        skipDownload: true,
-        flatPlaylist: true,
-        noWarnings: true,
-        quiet: true
-    });
-    const video = result && ((result.entries && result.entries[0]) || result);
-    if (!video || !video.id) return null;
-    return {
-        title: video.title || query,
-        url: video.webpage_url || `https://www.youtube.com/watch?v=${video.id}`
-    };
+    const results = await ytSearch(query);
+    const video = results && results.videos && results.videos[0];
+    return video ? { title: video.title, url: video.url } : null;
 }
 
 function stopVoicePlayer(guildId) {
