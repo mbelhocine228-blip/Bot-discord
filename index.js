@@ -17,290 +17,47 @@ const { Kazagumo } = require('kazagumo');
 const app = express();
 app.set('trust proxy', 1);
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.DISCORD_BOT_TOKEN;
-function getOpenAiKey() { return (process.env.OPENAI_API_KEY || '').trim().replace(/^['\"]|['\"]$/g, ''); }
-const AI_CHANNEL_PREFIX = 'ai-private:';
-const aiSessions = new Map();
-
-const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
-    ] 
-});
-
-const LAVALINK_HOST = process.env.LAVALINK_HOST || 'lavalinkv4.serenetia.com';
-const LAVALINK_PORT = process.env.LAVALINK_PORT || '443';
-const LAVALINK_PASSWORD = process.env.LAVALINK_PASSWORD || 'https://dsc.gg/ajidevserver';
-const LAVALINK_SECURE = process.env.LAVALINK_SECURE !== 'false';
-const kazagumo = new Kazagumo({
-    defaultSearchEngine: 'youtube',
-    send: (guildId, payload) => {
-        const guild = client.guilds.cache.get(guildId);
-        if (guild) guild.shard.send(payload);
-    }
-}, new Connectors.DiscordJS(client), [{
-    name: 'free-lavalink',
-    url: LAVALINK_HOST + ':' + LAVALINK_PORT,
-    auth: LAVALINK_PASSWORD,
-    secure: LAVALINK_SECURE
-}], { reconnectTries: 10, reconnectInterval: 10 });
-
-kazagumo.shoukaku.on('ready', name => console.log('Lavalink ' + name + ': Ready'));
-kazagumo.shoukaku.on('error', (name, error) => console.error('Lavalink ' + name + ' error:', error.message));
-kazagumo.shoukaku.on('close', (name, code, reason) => console.warn('Lavalink ' + name + ' closed:', code, reason || 'no reason'));
-kazagumo.shoukaku.on('disconnect', name => console.warn('Lavalink ' + name + ' disconnected'));
-kazagumo.on('playerStart', (player, track) => console.log('Playing ' + track.title + ' in guild ' + player.guildId));
-kazagumo.on('playerEmpty', player => { console.log('Queue empty in guild ' + player.guildId); kazagumo.destroyPlayer(player.guildId); });
-
-const guildSettings = new Map();
-const serverFeatures = new Map();
-const guildClubTimers = new Map();
-const serverConfigs = new Map();
-
-// Voice players per guild
-const voicePlayers = new Map(); // guildId -> { connection, player }
-
- // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
-const SPAM_LIMIT = 5;         
-const SPAM_INTERVAL = 5000;   
-const ADMIN_CHANNEL_ID = '1527797722122555475'; 
-const spamTracker = new Map(); 
-// ===================================================================
-
-function getDefaultConfig(guildId) {
-    return {
-        guildId,
-        settings: { prefix: "!", language: "en" },
-        serverDiscovery: { enabled: false, description: "" },
-        premium: { active: false, tier: 0 },
-        moderation: {
-            antiSpam: true,
-            antiLink: false,
-            badWords: ["badword1", "badword2"],
-            modLogChannel: null
-        },
-        roles: {
-            autorole: null,
-            reactionRoles: []
-        },
-        customCommands: [],
-        notifications: {
-            welcomeChannel: null,
-            welcomeMessage: "Welcome {user} to RKS POWER!",
-            twitchAnnounceChannel: null
-        },
-        utility: {
-            embedColor: "#FFD700"
-        }
-    };
+function getAiProvider() {
+    const clean = value => String(value || '').trim().replace(/^['\"]|['\"]$/g, '');
+    return { geminiKey: clean(process.env.GEMINI_API_KEY), openAiKey: clean(process.env.OPENAI_API_KEY) };
 }
 
-function getGuildFeatures(guildId) {
-    if (!serverFeatures.has(guildId)) {
-        serverFeatures.set(guildId, {
-            attachmentspam: true,
-            automod: true,
-            capslimit: true,
-            capspunish: true,
-            censor: true,
-            linkspam: true,
-            deletefiles: true,
-            mentionsspam: true,
-            gaming_commands: true,
-            notifications: true
+async function askCodingAssistant(channelId, content) {
+    const provider = getAiProvider();
+    if (!provider.geminiKey && !provider.openAiKey) throw new Error('AI_KEY_MISSING');
+    const history = aiSessions.get(channelId) || [];
+    history.push({ role: 'user', content });
+    const systemPrompt = 'أنت مساعد برمجة خبير داخل قناة Discord خاصة. اكتب أكوادًا قابلة للنسخ، اشرح باختصار، صحح الأخطاء، وساعد في frontend وbackend وDiscord وGitHub وقواعد البيانات. لا تدّع أنك شغلت كودًا أو عدّلت ملفات لم تعدّلها فعليًا.';
+    let answer;
+    if (provider.geminiKey) {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(provider.geminiKey), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: history.slice(-20).map(item => ({ role: item.role === 'assistant' ? 'model' : 'user', parts: [{ text: item.content }] })),
+                generationConfig: { maxOutputTokens: 2000 }
+            })
         });
-    }
-    return serverFeatures.get(guildId);
-}
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(session({ 
-    secret: 'rks-koya-master-secret-999', 
-    resave: false, 
-    saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true, sameSite: 'lax' }
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.use(new DiscordStrategy({
-    clientID: '1171579175635800175',         
-    clientSecret: process.env.DISCORD_CLIENT_SECRET, 
-    callbackURL: 'https://bot-discord-g9r5.onrender.com/callback',
-    scope: ['identify', 'guilds']
-}, (accessToken, refreshToken, profile, done) => {
-    return done(null, profile);
-}));
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user));
-
-app.get('/login', passport.authenticate('discord'));
-app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
-app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
-
-const INVITE_URL = 'https://discord.com/oauth2/authorize?client_id=1171579175635800175&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fbot-discord-g9r5.onrender.com%2Fcallback&integration_type=0&scope=bot+applications.commands';
-
-const botCommandsList = [
-    { name: 'ban', desc: 'حظر عضو من السيرفر' },
-    { name: 'unban', desc: 'فك الحظر عن عضو بواسطة الآيدي' },
-    { name: 'kick', desc: 'طرد عضو من السيرفر' },
-    { name: 'mute', desc: 'كتم عضو مؤقتاً (Timeout)' },
-    { name: 'unmute', desc: 'فك الكتم عن عضو' },
-    { name: 'clear', desc: 'مسح وحذف الرسائل بسرعة' },
-    { name: 'warn', desc: 'تحذير عضو مخالف' },
-    { name: 'lock', desc: 'قفل الروم الحالي لمنع التحدث' },
-    { name: 'unlock', desc: 'فتح الروم الحالي' },
-    { name: 'slowmode', desc: 'تحديد وقت بطيء للشات' },
-    { name: 'ping', desc: 'فحص سرعة استجابة البوت' },
-    { name: 'say', desc: 'تكرار الكلام عبر البوت' },
-    { name: 'announcement', desc: 'إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص' },
-    { name: 'embed', desc: 'إنشاء رسالة مزخرفة مخصصة' },
-    { name: 'poll', desc: 'عمل تصويت سريع للأعضاء' },
-    { name: 'avatar', desc: 'عرض صورة بروفايلك أو عضو آخر' },
-    { name: 'serverinfo', desc: 'عرض معلومات السيرفر الكاملة' },
-    { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
-    { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
-    { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
-    { name: 'google', desc: 'البحث وجلب الإجابة مباشرة من محرك البحث' },
-    { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
-    { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
-    { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
-    { name: 'ticketsetup', desc: 'إنشاء لوحة التذاكر التفاعلية' },
-    { name: 'applysetup', desc: 'إرسال نموذج التقديم على كلان RKS' },
-    { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
-    { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
-    { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
-    { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
-    { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
-    { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
-    { name: '8ball', desc: 'اسأل كرة الحظ سؤالاً وستجيبك' },
-    { name: 'ascii', desc: 'تحويل النص إلى حروف بارزة' },
-    { name: 'uptime', desc: 'معرفة مدة تشغيل البوت المستمرة' }
-];
-
-const commands = [
-    new SlashCommandBuilder().setName('ban').setDescription('حظر عضو من السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('unban').setDescription('فك الحظر عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addStringOption(opt => opt.setName('userid').setDescription('آيدي العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('طرد عضو').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('mute').setDescription('كتم عضو مؤقتاً').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('unmute').setDescription('فك الكتم عن عضو').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('clear').setDescription('مسح الرسائل بسرعة').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addIntegerOption(opt => opt.setName('count').setDescription('العدد').setRequired(true)),
-    new SlashCommandBuilder().setName('warn').setDescription('تحذير عضو').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('السبب')),
-    new SlashCommandBuilder().setName('lock').setDescription('قفل الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-    new SlashCommandBuilder().setName('unlock').setDescription('فتح الروم الحالي').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-    new SlashCommandBuilder().setName('slowmode').setDescription('تحديد وقت بطيء للشات').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels).addIntegerOption(opt => opt.setName('seconds').setDescription('الثواني').setRequired(true)),
-    new SlashCommandBuilder().setName('ping').setDescription('فحص سرعة استجابة البوت'),
-    new SlashCommandBuilder().setName('say').setDescription('تكرار الكلام عبر البوت').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('announcement')
-        .setDescription('إرسال إعلان رسمي مع رسالة مخصصة وصورة وروم مخصص')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-        .addChannelOption(option =>
-            option.setName('channel')
-                .setDescription('اختر الروم المراد إرسال الإعلان فيه')
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(true))
-        .addStringOption(option =>
-            option.setName('message')
-                .setDescription('اكتب نص الإعلان المراد إرساله')
-                .setRequired(true))
-        .addAttachmentOption(option =>
-            option.setName('image')
-                .setDescription('اختر صورة الإعلان المراد إرفاقها (اختياري)')
-                .setRequired(false)),
-    new SlashCommandBuilder().setName('embed').setDescription('إنشاء رسالة مزخرفة مخصصة').addStringOption(opt => opt.setName('title').setDescription('العنوان').setRequired(true)).addStringOption(opt => opt.setName('description').setDescription('المحتوى').setRequired(true)),
-    new SlashCommandBuilder().setName('poll').setDescription('عمل تصويت سريع').addStringOption(opt => opt.setName('question').setDescription('السؤال').setRequired(true)),
-    new SlashCommandBuilder().setName('avatar').setDescription('عرض صورة بروفايلك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
-    new SlashCommandBuilder().setName('serverinfo').setDescription('عرض معلومات السيرفر الكاملة'),
-    new SlashCommandBuilder().setName('userinfo').setDescription('عرض معلومات عضويتك أو عضو آخر').addUserOption(opt => opt.setName('user').setDescription('العضو')),
-    new SlashCommandBuilder().setName('roll').setDescription('رمي زهر عشوائي (رقم من 1 لـ 100)'),
-    new SlashCommandBuilder().setName('coinflip').setDescription('لعبة طرة أو كتابة'),
-    new SlashCommandBuilder().setName('google').setDescription('البحث وجلب الإجابة مباشرة من محرك البحث').addStringOption(opt => opt.setName('query').setDescription('ما الذي تبحث عنه؟').setRequired(true)),
-    new SlashCommandBuilder().setName('racingnews').setDescription('آخر أخبار لعبة Racing Master الرسمية'),
-    new SlashCommandBuilder().setName('rockstats').setDescription('عرض إحصائيات كلان RKS•ＰＯＷＥＲ'),
-    new SlashCommandBuilder().setName('setnews').setDescription('تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر').addChannelOption(opt => opt.setName('channel').setDescription('اختر الروم').setRequired(true)),
-    new SlashCommandBuilder().setName('ticketsetup').setDescription('إنشاء لوحة التذاكر التفاعلية للاستفسارات'),
-    new SlashCommandBuilder().setName('applysetup').setDescription('إرسال نظام الانضمام والتقديم لكلان RKS'),
-    new SlashCommandBuilder().setName('setclubtimer').setDescription('تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)').addStringOption(opt => opt.setName('endurance_time').setDescription('وقت Endurance').setRequired(true)).addStringOption(opt => opt.setName('duel_time').setDescription('وقت Duel').setRequired(true)),
-    new SlashCommandBuilder().setName('eventsched').setDescription('جدولة سباق أو فعالية جديدة').addStringOption(opt => opt.setName('title').setDescription('اسم السباق/الفعالية').setRequired(true)).addStringOption(opt => opt.setName('time').setDescription('الوقت والتاريخ').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('event')
-        .setDescription('بدء مسابقة مع عد تنازلي حي للوقت (مثال: 0:01:30)')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-        .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
-        .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
-    // ---- Music commands ----
-    new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
-    new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
-    new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
-    new SlashCommandBuilder().setName('pause').setDescription('إيقاف الموسيقى مؤقتاً'),
-    new SlashCommandBuilder().setName('resume').setDescription('استكمال الموسيقى'),
-    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض الأغنية التي تعمل حالياً'),
-    // -------------------------
-    new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
-    new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
-    new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
-    new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
-    new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
-    new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard'),
-    new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة مع مساعد البرمجة')
-].map(cmd => cmd.toJSON());
-
-if (!DISCORD_TOKEN) {
-    console.error('Missing DISCORD_TOKEN or DISCORD_BOT_TOKEN');
-    process.exit(1);
-}
-
-const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
-client.once('ready', async () => {
-    console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
-    for (const guild of client.guilds.cache.values()) {
-        await brandBotInGuild(guild);
-    }
-    try {
-        await rest.put(Routes.applicationCommands('1171579175635800175'), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
-    } catch (error) { console.error(error); }
-
-    setInterval(() => {
-        guildSettings.forEach((settings, guildId) => {
-            if (settings && settings.newsChannelId) {
-                const guild = client.guilds.cache.get(guildId);
-                if (guild) {
-                    const features = getGuildFeatures(guildId);
-                    if (features.notifications) {
-                        const channel = guild.channels.cache.get(settings.newsChannelId);
-                        if (channel) {
-                            const timerData = guildClubTimers.get(guildId);
-                            if (timerData) {
-                                const embed = new EmbedBuilder()
-                                    .setTitle('🏁 التحديث التلقائي لمهام كلان RKS•ＰＯＷＥＲ')
-                                    .setDescription('تابع أحدث أوقات المهام الحالية في اللعبة:')
-                                    .setColor('#FFD700')
-                                    .addFields(
-                                        { name: '🏎️ CLUB ENDURANCE', value: `⏳ المتبقي: **${timerData.endurance}**`, inline: false },
-                                        { name: '⚔️ CLUB DUEL', value: `⏳ المتبقي: **${timerData.duel}**`, inline: false }
-                                    )
-                                    .setTimestamp();
-
-                                channel.send({ embeds: [embed] }).catch(() => {});
-                            }
-                        }
-                    }
-                }
-            }
+        if (!response.ok) { const errorBody = await response.text(); throw new Error('Gemini ' + response.status + ': ' + errorBody.slice(0, 300)); }
+        const data = await response.json();
+        answer = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
+    } else {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + provider.openAiKey },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 2000, messages: [{ role: 'system', content: systemPrompt }, ...history.slice(-20)] })
         });
-    }, 60 * 60 * 1000);
-});
+        if (!response.ok) { const errorBody = await response.text(); throw new Error('OpenAI ' + response.status + ': ' + errorBody.slice(0, 300)); }
+        const data = await response.json();
+        answer = data.choices?.[0]?.message?.content?.trim();
+    }
+    answer = answer || 'لم أستطع توليد رد الآن.';
+    history.push({ role: 'assistant', content: answer });
+    aiSessions.set(channelId, history.slice(-20));
+    return answer;
+}
 
-// ==================== معالج الرسائل ونظام الحماية المدمج المطور ====================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
     
@@ -1080,14 +837,15 @@ async function askCodingAssistant(channelId, content) {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild || !message.channel.isTextBased()) return;
     if (!message.channel.topic || !message.channel.topic.startsWith(AI_CHANNEL_PREFIX)) return;
-    if (!getOpenAiKey()) return message.reply('المفتاح غير ظاهر للبوت. احفظ OPENAI_API_KEY في Render ثم نفّذ Redeploy يدوي.');
+    const provider = getAiProvider();
+    if (!provider.geminiKey && !provider.openAiKey) return message.reply('أضف GEMINI_API_KEY في Render ثم نفّذ Redeploy يدوي.');
     try {
         if ('sendTyping' in message.channel) await message.channel.sendTyping();
         const answer = await askCodingAssistant(message.channel.id, message.content);
         for (const chunk of splitDiscordMessage(answer)) await message.channel.send(chunk);
     } catch (error) {
         console.error('AI channel error:', error.message);
-        await message.reply(error.message.includes('401') ? 'المفتاح مرفوض من OpenAI. أنشئ مفتاحًا جديدًا وتأكد من الرصيد/الفوترة.' : 'خطأ من OpenAI: ' + error.message.slice(0, 180));
+        await message.reply(/401|403/.test(error.message) ? 'مفتاح Gemini مرفوض أو منتهي. أنشئ مفتاحًا جديدًا من Google AI Studio.' : 'خطأ من Gemini: ' + error.message.slice(0, 180));
     }
 });
 // ======================================================================
