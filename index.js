@@ -4,6 +4,9 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+const ytdl = require('ytdl-core');
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -12,7 +15,8 @@ const client = new Client({
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMembers, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent 
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
     ] 
 });
 
@@ -21,7 +25,10 @@ const serverFeatures = new Map();
 const guildClubTimers = new Map();
 const serverConfigs = new Map();
 
-// ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
+// Voice players per guild
+const voicePlayers = new Map(); // guildId -> { connection, player }
+
+ // ==================== إعدادات نظام السبام المتقدم (المدمج) ====================
 const SPAM_LIMIT = 5;         
 const SPAM_INTERVAL = 5000;   
 const ADMIN_CHANNEL_ID = '1527797722122555475'; 
@@ -125,7 +132,7 @@ const botCommandsList = [
     { name: 'userinfo', desc: 'عرض معلومات عضويتك أو عضو آخر' },
     { name: 'roll', desc: 'رمي زهر عشوائي (رقم من 1 لـ 100)' },
     { name: 'coinflip', desc: 'لعبة طرة أو كتابة' },
-    { name: 'google', desc: 'البحث في جوجل وجلب الإجابة مباشرة دون إرسال روابط' },
+    { name: 'google', desc: 'البحث وجلب الإجابة مباشرة من محرك البحث' },
     { name: 'racingnews', desc: 'آخر أخبار لعبة Racing Master الرسمية' },
     { name: 'rockstats', desc: 'عرض إحصائيات كلان RKS•ＰＯＷＥＲ' },
     { name: 'setnews', desc: 'تحديد روم الإرسال التلقائي لأخبار رايسنغ ماستر' },
@@ -193,6 +200,11 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
         .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
         .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
+    // ---- Music commands ----
+    new SlashCommandBuilder().setName('play').setDescription('تشغيل أغنية في القناة الصوتية، أو عرض قائمة للاختيار').addStringOption(opt => opt.setName('url').setDescription('رابط يوتيوب (اختياري)')),
+    new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
+    new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
+    // -------------------------
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
     new SlashCommandBuilder().setName('hug').setDescription('إرسال حضن ودي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
     new SlashCommandBuilder().setName('slap').setDescription('إعطاء كف مزحي لعضو').addUserOption(opt => opt.setName('user').setDescription('العضو').setRequired(true)),
@@ -929,8 +941,17 @@ app.get('/control/:guildId/:section', (req, res) => {
     `);
 });
 
+// ----------------- Songs catalog (يمكن تعديل القائمة هنا) -----------------
+const SONG_CATALOG = [
+    { id: 'song_1', title: 'Sample Song 1', url: 'https://www.youtube.com/watch?v=DWcJFNfaw9c' },
+    { id: 'song_2', title: 'Sample Song 2', url: 'https://www.youtube.com/watch?v=3JZ4pnN3DGs' },
+    { id: 'song_3', title: 'Sample Song 3', url: 'https://www.youtube.com/watch?v=RBumgq5yVrA' }
+];
+// --------------------------------------------------------------------------
+
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
+        // Ticket buttons
         if (interaction.customId === 'create_ticket') {
             await interaction.deferReply({ ephemeral: true });
             try {
@@ -960,18 +981,68 @@ client.on('interactionCreate', async interaction => {
                 console.error(err);
                 await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء التذكرة.' });
             }
+            return;
         } 
         else if (interaction.customId === 'close_ticket') {
             await interaction.reply({ content: '🔒 سيتم إغلاق هذه التذكرة وحذفها خلال 5 ثواني...' });
             setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
+            return;
         }
-        return;
+
+        // Song selection buttons (customId like song_song_1)
+        if (interaction.customId && interaction.customId.startsWith('song_')) {
+            await interaction.deferReply({ ephemeral: true });
+            const songId = interaction.customId; // e.g. song_1
+            const song = SONG_CATALOG.find(s => s.id === songId);
+            if (!song) return interaction.editReply({ content: '❌ لم أتمكن من العثور على الأغنية المختارة.' });
+
+            const voiceChannel = interaction.member.voice.channel;
+            if (!voiceChannel) return interaction.editReply({ content: '❌ رجاءً ادخل لقناة صوتية أولاً لتشغيل الأغنية.' });
+
+            try {
+                // play the song
+                if (!ytdl.validateURL(song.url)) {
+                    return interaction.editReply({ content: '❌ الرابط غير صالح للتشغيل حالياً.' });
+                }
+
+                const stream = ytdl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+                const resource = createAudioResource(stream);
+                const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+                player.play(resource);
+
+                const connection = joinVoiceChannel({
+                    channelId: voiceChannel.id,
+                    guildId: voiceChannel.guild.id,
+                    adapterCreator: voiceChannel.guild.voiceAdapterCreator
+                });
+
+                connection.subscribe(player);
+                voicePlayers.set(voiceChannel.guild.id, { connection, player });
+
+                player.on(AudioPlayerStatus.Idle, () => {
+                    try {
+                        const entry = voicePlayers.get(voiceChannel.guild.id);
+                        if (entry && entry.connection) {
+                            entry.connection.destroy();
+                        }
+                    } catch (e) {}
+                    voicePlayers.delete(voiceChannel.guild.id);
+                });
+
+                await interaction.editReply({ content: `▶️ تم تشغيل **${song.title}** الآن في ${voiceChannel}` });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الأغنية.' });
+            }
+            return;
+        }
     }
 
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options, member, guild, channel } = interaction;
 
     try {
+        // ... (existing commands handlers remain unchanged)
         if (commandName === 'clear') {
             const count = options.getInteger('count');
             if (count < 1 || count > 100) {
@@ -1212,7 +1283,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: '✅ تم جدولة الفعالية وإرسالها بنجاح!', ephemeral: true });
         }
         else if (commandName === 'event') {
-            if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) 
+            if (!member.permissions.has(PermissionFlagsBits.ManageMessages)) 
                 return interaction.reply({ content: '❌ يتطلب صلاحية إدارة الرسائل.', ephemeral: true });
 
             const title = options.getString('title');
@@ -1362,6 +1433,83 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
         }
+        // ---------------- Music commands handlers ----------------
+        else if (commandName === 'play') {
+            const url = options.getString('url');
+            const voiceChannel = member.voice.channel;
+            if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
+
+            if (url) {
+                if (!ytdl.validateURL(url)) return interaction.reply({ content: '❌ الرابط غير صالح للتشغيل حالياً.', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                try {
+                    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+                    const resource = createAudioResource(stream);
+                    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+                    player.play(resource);
+
+                    const connection = joinVoiceChannel({
+                        channelId: voiceChannel.id,
+                        guildId: voiceChannel.guild.id,
+                        adapterCreator: voiceChannel.guild.voiceAdapterCreator
+                    });
+
+                    connection.subscribe(player);
+                    voicePlayers.set(voiceChannel.guild.id, { connection, player });
+
+                    player.on(AudioPlayerStatus.Idle, () => {
+                        try {
+                            const entry = voicePlayers.get(voiceChannel.guild.id);
+                            if (entry && entry.connection) entry.connection.destroy();
+                        } catch (e) {}
+                        voicePlayers.delete(voiceChannel.guild.id);
+                    });
+
+                    await interaction.editReply({ content: `▶️ تم تشغيل الأغنية الآن في ${voiceChannel}` });
+                } catch (err) {
+                    console.error(err);
+                    await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الرابط.' });
+                }
+            } else {
+                // show catalog buttons
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[0].id).setLabel(SONG_CATALOG[0].title).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[1].id).setLabel(SONG_CATALOG[1].title).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(SONG_CATALOG[2].id).setLabel(SONG_CATALOG[2].title).setStyle(ButtonStyle.Primary)
+                );
+                const embed = new EmbedBuilder()
+                    .setTitle('📜 كتالوج الأغاني - اختر أغنية للتشغيل')
+                    .setDescription('اضغط على الزر الخاص بالأغنية التي تود تشغيلها في قناتك الصوتية.')
+                    .setColor('#FFD700');
+                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+            }
+        }
+        else if (commandName === 'stop') {
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ لا يوجد شيء يعمل حالياً.', ephemeral: true });
+            try {
+                entry.player.stop(true);
+                voicePlayers.delete(guild.id);
+                if (entry.connection) entry.connection.destroy();
+                await interaction.reply({ content: '⏹️ تم إيقاف التشغيل.', ephemeral: true });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ حدث خطأ أثناء محاولة الإيقاف.', ephemeral: true });
+            }
+        }
+        else if (commandName === 'leave') {
+            const entry = voicePlayers.get(guild.id);
+            if (!entry) return interaction.reply({ content: '❌ البوت ليس في قناة صوتية.', ephemeral: true });
+            try {
+                if (entry.connection) entry.connection.destroy();
+                voicePlayers.delete(guild.id);
+                await interaction.reply({ content: '✅ خرجت من القناة الصوتية.', ephemeral: true });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ خطأ أثناء الخروج من القناة.', ephemeral: true });
+            }
+        }
+        // --------------------------------------------------------
         else {
             await interaction.reply({ content: `✅ تم تنفيذ أمر **/${commandName}** بنجاح!`, ephemeral: true });
         }
