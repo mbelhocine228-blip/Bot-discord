@@ -11,10 +11,9 @@
   },
   "dependencies": {
     "discord.js": "^14.16.3",
-    "@discordjs/voice": "^0.17.0",
-    "@discordjs/opus": "^0.9.0",
-    "libsodium-wrappers": "^0.7.15",
-    "@distube/ytdl-core": "^4.16.4",
+    "@discordjs/voice": "^0.19.2",
+            "@distube/ytdl-core": "^4.16.12",
+    "opusscript": "^0.1.1",
     "express": "^4.21.1",
     "express-session": "^1.18.1",
     "passport": "^0.7.0",
