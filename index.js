@@ -4,7 +4,7 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 const play = require('play-dl');
 const ytSearch = require('yt-search');
 
@@ -1132,6 +1132,7 @@ async function startNextTrack(guildId) {
     entry.current = track;
     try {
         const audio = await play.stream(track.url, { quality: 2, discordPlayerCompatibility: true });
+        await entersState(entry.connection, VoiceConnectionStatus.Ready, 20000);
         entry.stream = audio.stream;
         entry.player.play(createAudioResource(audio.stream, { inputType: audio.type }));
         entry.starting = false;
@@ -1159,7 +1160,9 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
         const connection = joinVoiceChannel({
             channelId: voiceChannel.id,
             guildId,
-            adapterCreator: voiceChannel.guild.voiceAdapterCreator
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+            selfDeaf: false,
+            selfMute: false
         });
         const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
         entry = { connection, player, voiceChannelId: voiceChannel.id, queue: [], current: null, starting: false, stream: null };
@@ -1769,18 +1772,11 @@ client.on('interactionCreate', async interaction => {
             try {
                 if (!isYouTubeUrl(query)) {
                     const searchResult = await ytSearch(query);
-                    const videos = (searchResult.videos || []).filter(video => video.videoId && video.title).slice(0, 5);
-                    if (!videos.length) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم. جرّب اسمًا أوضح.' });
-                    const row = new ActionRowBuilder().addComponents(videos.map((video, i) => new ButtonBuilder()
-                        .setCustomId(`music_search_${user.id}_${video.videoId}`)
-                        .setLabel(`${i + 1}. ${video.title}`.slice(0, 80))
-                        .setStyle(ButtonStyle.Primary)));
-                    const description = videos.map((video, i) => `**${i + 1}.** ${video.title}${video.timestamp ? ' — ' + video.timestamp : ''}`).join('\n');
-                    return interaction.editReply({
-                        content: '🔎 اختر الأغنية من نتائج البحث:',
-                        embeds: [new EmbedBuilder().setColor('#FFD700').setTitle(`نتائج البحث عن: ${query}`).setDescription(description)],
-                        components: [row]
-                    });
+                    const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
+                    if (!firstVideo) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم. جرّب اسمًا أوضح.' });
+                    const resultUrl = 'https://www.youtube.com/watch?v=' + firstVideo.videoId;
+                    const queued = await playYouTubeTrack(voiceChannel, resultUrl, { title: firstVideo.title });
+                    return interaction.editReply({ content: queued.playingNow ? '▶️ يتم تشغيل **' + firstVideo.title + '** الآن.' : '✅ تمت إضافة **' + firstVideo.title + '** إلى قائمة التشغيل (المركز ' + queued.position + ').' });
                 }
                 await playYouTubeTrack(voiceChannel, query);
                 await interaction.editReply({ content: '▶️ تم تشغيل الأغنية الآن.' });
