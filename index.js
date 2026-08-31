@@ -275,7 +275,7 @@ const commands = [
         .addStringOption(opt => opt.setName('title').setDescription('عنوان المسابقة').setRequired(true))
         .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     // ---- Music commands ----
-    new SlashCommandBuilder().setName('play').setDescription('تشغيل أغنية في القناة الصوتية، أو عرض قائمة للاختيار').addStringOption(opt => opt.setName('url').setDescription('رابط يوتيوب (اختياري)')),
+    new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
     new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
     new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
     // -------------------------
@@ -288,7 +288,9 @@ const commands = [
     new SlashCommandBuilder().setName('tagall').setDescription('وضع شعار RKS على جميع أعضاء السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
     new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard'),
     // ---- AI command ----
-    new SlashCommandBuilder().setName('ai').setDescription('فتح قناة خاصة بك للدردشة مع الذكاء الاصطناعي (Claude)'),
+    new SlashCommandBuilder().setName('ai').setDescription('فتح قناة خاصة بك للدردشة مع الذكاء الاصطناعي'),
+    new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة للدردشة مع الذكاء الاصطناعي'),
+    new SlashCommandBuilder().setName('pirvat').setDescription('فتح قناة خاصة للدردشة مع الذكاء الاصطناعي'),
     new SlashCommandBuilder().setName('ai-reset').setDescription('مسح ذاكرة المحادثة الحالية مع الذكاء الاصطناعي فهاد القناة'),
     // --------------------
 ].map(cmd => cmd.toJSON());
@@ -1649,7 +1651,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         // ---------------- AI command handler ----------------
-        else if (commandName === 'ai') {
+        else if (commandName === 'ai' || commandName === 'private' || commandName === 'pirvat') {
             await interaction.deferReply({ ephemeral: true });
 
             const existingChannelId = aiChannels.get(user.id);
