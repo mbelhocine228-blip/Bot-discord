@@ -353,6 +353,32 @@ client.once('ready', async () => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
+    if (message.content.trim().toLowerCase() === '!tagall') {
+        const canManage = message.member.permissions.has(PermissionsBitField.Flags.ManageNicknames) || message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+        if (!canManage) return message.reply('❌ هذا الأمر يتطلب صلاحية Manage Nicknames أو Administrator.');
+        const progress = await message.reply('⏳ بدأت إضافة شعار RKS للأعضاء القابلين للتعديل...');
+        try {
+            const members = await message.guild.members.fetch();
+            let updated = 0;
+            let unchanged = 0;
+            let skipped = 0;
+            for (const target of members.values()) {
+                if (target.user.bot || target.id === message.guild.ownerId) { skipped++; continue; }
+                const result = await applyRksNickname(target, true);
+                if (result === 'updated') {
+                    updated++;
+                    await new Promise(resolve => setTimeout(resolve, 1100));
+                } else if (result === 'unchanged') unchanged++;
+                else skipped++;
+            }
+            await progress.edit('✅ اكتمل الشعار. تم تحديث: ' + updated + ' | موجود مسبقاً: ' + unchanged + ' | تم تخطيه: ' + skipped);
+        } catch (error) {
+            console.error('❌ Prefix tagall failed:', error);
+            await progress.edit('❌ تعذر تطبيق الشعار. تأكد من صلاحية Manage Nicknames وأن رتبة البوت أعلى من رتب الأعضاء.').catch(() => {});
+        }
+        return;
+    }
+
     // ---- AI channel: forward message to Claude and reply, skip moderation ----
     if (aiConversations.has(message.channel.id)) {
         if (!message.content || message.content.trim().length === 0) return;
@@ -474,8 +500,8 @@ client.on('messageCreate', async message => {
 const RKS_NICKNAME_PREFIX = 'RKS • ';
 const AUTO_NICKNAME_TAG = process.env.AUTO_NICKNAME_TAG !== 'false';
 
-async function applyRksNickname(member) {
-    if (!AUTO_NICKNAME_TAG || !member.manageable) return 'skipped';
+async function applyRksNickname(member, force = false) {
+    if ((!AUTO_NICKNAME_TAG && !force) || !member.manageable) return 'skipped';
     const rawName = member.user.globalName || member.user.username || 'عضو';
     const cleanName = rawName.replace(/^RKS \•\s*/i, '').trim() || 'عضو';
     const nickname = (RKS_NICKNAME_PREFIX + cleanName).slice(0, 32);
@@ -1608,7 +1634,7 @@ client.on('interactionCreate', async interaction => {
                 let skipped = 0;
                 for (const target of members.values()) {
                     if (target.user.bot || target.id === guild.ownerId) { skipped++; continue; }
-                    const result = await applyRksNickname(target);
+                    const result = await applyRksNickname(target, true);
                     if (result === 'updated') {
                         updated++;
                         await new Promise(resolve => setTimeout(resolve, 1100));
