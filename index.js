@@ -6,6 +6,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
+const ytSearch = require('yt-search');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -283,6 +284,7 @@ const commands = [
     new SlashCommandBuilder().setName('8ball').setDescription('اسأل كرة الحظ سؤالاً وستجيبك').addStringOption(opt => opt.setName('question').setDescription('سؤالك').setRequired(true)),
     new SlashCommandBuilder().setName('ascii').setDescription('تحويل النص إلى حروف بارزة').addStringOption(opt => opt.setName('text').setDescription('النص').setRequired(true)),
     new SlashCommandBuilder().setName('uptime').setDescription('معرفة مدة تشغيل البوت المستمرة'),
+    new SlashCommandBuilder().setName('tagall').setDescription('وضع شعار RKS على جميع أعضاء السيرفر').setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
     new SlashCommandBuilder().setName('botinfo').setDescription('معلومات تقنية عن بوت RKS Dashboard'),
     // ---- AI command ----
     new SlashCommandBuilder().setName('ai').setDescription('فتح قناة خاصة بك للدردشة مع الذكاء الاصطناعي (Claude)'),
@@ -463,10 +465,28 @@ client.on('messageCreate', async message => {
 });
 // ==========================================================================
 
-client.on('guildMemberAdd', member => {
+const RKS_NICKNAME_PREFIX = 'RKS • ';
+const AUTO_NICKNAME_TAG = process.env.AUTO_NICKNAME_TAG !== 'false';
+
+async function applyRksNickname(member) {
+    if (!AUTO_NICKNAME_TAG || !member.manageable) return 'skipped';
+    const rawName = member.user.globalName || member.user.username || 'عضو';
+    const cleanName = rawName.replace(/^RKS \•\s*/i, '').trim() || 'عضو';
+    const nickname = (RKS_NICKNAME_PREFIX + cleanName).slice(0, 32);
+    if (member.nickname === nickname) return 'unchanged';
+    try {
+        await member.setNickname(nickname, 'RKS automatic member tag');
+        return 'updated';
+    } catch (error) {
+        console.error('❌ تعذر وضع شعار RKS للعضو:', error.message || error);
+        return 'failed';
+    }
+}
+
+client.on('guildMemberAdd', async member => {
+    await applyRksNickname(member);
     const config = serverConfigs.get(member.guild.id);
     if (!config) return;
-
     if (config.notifications.welcomeChannel) {
         const channel = member.guild.channels.cache.get(config.notifications.welcomeChannel);
         if (channel) {
@@ -474,10 +494,7 @@ client.on('guildMemberAdd', member => {
             channel.send(welcomeText).catch(() => {});
         }
     }
-
-    if (config.roles.autorole) {
-        member.roles.add(config.roles.autorole).catch(err => console.log("Failed to assign autorole:", err));
-    }
+    if (config.roles.autorole) member.roles.add(config.roles.autorole).catch(err => console.log('Failed to assign autorole:', err));
 });
 
 app.post('/control/:guildId/commands/save', (req, res) => {
@@ -1048,6 +1065,38 @@ app.get('/control/:guildId/:section', (req, res) => {
 });
 
 // ----------------- Songs catalog (يمكن تعديل القائمة هنا) -----------------
+async function playYouTubeTrack(voiceChannel, url) {
+    if (!ytdl.validateURL(url)) throw new Error('Invalid YouTube URL');
+
+    const guildId = voiceChannel.guild.id;
+    const previous = voicePlayers.get(guildId);
+    if (previous) {
+        try { previous.player.stop(true); } catch (e) {}
+        try { previous.connection.destroy(); } catch (e) {}
+        voicePlayers.delete(guildId);
+    }
+
+    const connection = joinVoiceChannel({ channelId: voiceChannel.id, guildId, adapterCreator: voiceChannel.guild.voiceAdapterCreator });
+    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+    const resource = createAudioResource(stream);
+    const cleanup = () => {
+        const current = voicePlayers.get(guildId);
+        if (current && current.player === player) {
+            voicePlayers.delete(guildId);
+            try { connection.destroy(); } catch (e) {}
+        }
+    };
+    stream.on('error', error => { console.error('❌ YouTube stream error:', error.message || error); cleanup(); });
+    player.on('error', error => { console.error('❌ Audio player error:', error.message || error); cleanup(); });
+    player.once(AudioPlayerStatus.Idle, cleanup);
+    connection.on('error', error => { console.error('❌ Voice connection error:', error.message || error); cleanup(); });
+    voicePlayers.set(guildId, { connection, player });
+    connection.subscribe(player);
+    player.play(resource);
+    return player;
+}
+
 const SONG_CATALOG = [
     { id: 'song_1', title: 'Sample Song 1', url: 'https://www.youtube.com/watch?v=DWcJFNfaw9c' },
     { id: 'song_2', title: 'Sample Song 2', url: 'https://www.youtube.com/watch?v=3JZ4pnN3DGs' },
@@ -1096,48 +1145,37 @@ client.on('interactionCreate', async interaction => {
         }
 
         // Song selection buttons (customId like song_song_1)
+        if (interaction.customId && interaction.customId.startsWith('music_search_')) {
+            const parts = interaction.customId.split('_');
+            const ownerId = parts[2];
+            const videoId = parts[3];
+            if (ownerId !== interaction.user.id) return interaction.reply({ content: '❌ هذه نتائج بحث خاصة بعضو آخر.', ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
+            const voiceChannel = interaction.member.voice.channel;
+            if (!voiceChannel) return interaction.editReply({ content: '❌ ادخل قناة صوتية أولاً.' });
+            try {
+                const url = `https://www.youtube.com/watch?v=${videoId}`;
+                await playYouTubeTrack(voiceChannel, url);
+                await interaction.editReply({ content: '▶️ تم تشغيل الأغنية التي اخترتها الآن.' });
+            } catch (err) {
+                console.error('❌ Search result playback failed:', err);
+                await interaction.editReply({ content: '❌ تعذر تشغيل هذه الأغنية. جرّب نتيجة أخرى أو رابطاً آخر.' });
+            }
+            return;
+        }
+
         if (interaction.customId && interaction.customId.startsWith('song_')) {
             await interaction.deferReply({ ephemeral: true });
-            const songId = interaction.customId; // e.g. song_1
+            const songId = interaction.customId;
             const song = SONG_CATALOG.find(s => s.id === songId);
             if (!song) return interaction.editReply({ content: '❌ لم أتمكن من العثور على الأغنية المختارة.' });
-
             const voiceChannel = interaction.member.voice.channel;
             if (!voiceChannel) return interaction.editReply({ content: '❌ رجاءً ادخل لقناة صوتية أولاً لتشغيل الأغنية.' });
-
             try {
-                // play the song
-                if (!ytdl.validateURL(song.url)) {
-                    return interaction.editReply({ content: '❌ الرابط غير صالح للتشغيل حالياً.' });
-                }
-
-                const stream = ytdl(song.url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                const resource = createAudioResource(stream);
-                const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-                player.play(resource);
-
-                const connection = joinVoiceChannel({
-                    channelId: voiceChannel.id,
-                    guildId: voiceChannel.guild.id,
-                    adapterCreator: voiceChannel.guild.voiceAdapterCreator
-                });
-
-                connection.subscribe(player);
-                voicePlayers.set(voiceChannel.guild.id, { connection, player });
-
-                player.on(AudioPlayerStatus.Idle, () => {
-                    try {
-                        const entry = voicePlayers.get(voiceChannel.guild.id);
-                        if (entry && entry.connection) {
-                            entry.connection.destroy();
-                        }
-                    } catch (e) {}
-                    voicePlayers.delete(voiceChannel.guild.id);
-                });
-
+                await playYouTubeTrack(voiceChannel, song.url);
                 await interaction.editReply({ content: `▶️ تم تشغيل **${song.title}** الآن في ${voiceChannel}` });
             } catch (err) {
-                console.error(err);
+                console.error('❌ Catalog playback failed:', err);
                 await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الأغنية.' });
             }
             return;
@@ -1553,6 +1591,31 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'ping') {
             await interaction.reply({ content: `🏓 سرعة استجابة ROCKS: ${client.ws.ping}ms` });
         }
+        else if (commandName === 'tagall') {
+            const canManage = member.permissions.has(PermissionsBitField.Flags.ManageNicknames) || member.permissions.has(PermissionsBitField.Flags.Administrator);
+            if (!canManage) return interaction.reply({ content: '❌ هذا الأمر يتطلب صلاحية Manage Nicknames أو Administrator.', ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const members = await guild.members.fetch();
+                let updated = 0;
+                let unchanged = 0;
+                let skipped = 0;
+                for (const target of members.values()) {
+                    if (target.user.bot || target.id === guild.ownerId) { skipped++; continue; }
+                    const result = await applyRksNickname(target);
+                    if (result === 'updated') {
+                        updated++;
+                        await new Promise(resolve => setTimeout(resolve, 1100));
+                    } else if (result === 'unchanged') unchanged++;
+                    else skipped++;
+                }
+                await interaction.editReply({ content: `✅ اكتمل الأمر. تم تحديث: ${updated} | موجود مسبقاً: ${unchanged} | تم تخطيه: ${skipped}` });
+            } catch (error) {
+                console.error('❌ Tag all failed:', error);
+                await interaction.editReply({ content: '❌ تعذر تطبيق الشعار على الأعضاء. تأكد من صلاحية Manage Nicknames وأن رتبة البوت أعلى من رتبهم.' });
+            }
+        }
+
         // ---------------- AI command handler ----------------
         else if (commandName === 'ai') {
             await interaction.deferReply({ ephemeral: true });
@@ -1607,53 +1670,32 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------
         // ---------------- Music commands handlers ----------------
         else if (commandName === 'play') {
-            const url = options.getString('url');
+            const query = options.getString('query') || options.getString('url');
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
-
-            if (url) {
-                if (!ytdl.validateURL(url)) return interaction.reply({ content: '❌ الرابط غير صالح للتشغيل حالياً.', ephemeral: true });
-                await interaction.deferReply({ ephemeral: true });
-                try {
-                    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-                    const resource = createAudioResource(stream);
-                    const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-                    player.play(resource);
-
-                    const connection = joinVoiceChannel({
-                        channelId: voiceChannel.id,
-                        guildId: voiceChannel.guild.id,
-                        adapterCreator: voiceChannel.guild.voiceAdapterCreator
+            if (!query) return interaction.reply({ content: '❌ اكتب اسم الأغنية أو رابط يوتيوب.', ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                if (!ytdl.validateURL(query)) {
+                    const searchResult = await ytSearch(query);
+                    const videos = (searchResult.videos || []).filter(video => video.videoId && video.title).slice(0, 5);
+                    if (!videos.length) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم. جرّب اسمًا أوضح.' });
+                    const row = new ActionRowBuilder().addComponents(videos.map((video, i) => new ButtonBuilder()
+                        .setCustomId(`music_search_${user.id}_${video.videoId}`)
+                        .setLabel(`${i + 1}. ${video.title}`.slice(0, 80))
+                        .setStyle(ButtonStyle.Primary)));
+                    const description = videos.map((video, i) => `**${i + 1}.** ${video.title}${video.timestamp ? ' — ' + video.timestamp : ''}`).join('\n');
+                    return interaction.editReply({
+                        content: '🔎 اختر الأغنية من نتائج البحث:',
+                        embeds: [new EmbedBuilder().setColor('#FFD700').setTitle(`نتائج البحث عن: ${query}`).setDescription(description)],
+                        components: [row]
                     });
-
-                    connection.subscribe(player);
-                    voicePlayers.set(voiceChannel.guild.id, { connection, player });
-
-                    player.on(AudioPlayerStatus.Idle, () => {
-                        try {
-                            const entry = voicePlayers.get(voiceChannel.guild.id);
-                            if (entry && entry.connection) entry.connection.destroy();
-                        } catch (e) {}
-                        voicePlayers.delete(voiceChannel.guild.id);
-                    });
-
-                    await interaction.editReply({ content: `▶️ تم تشغيل الأغنية الآن في ${voiceChannel}` });
-                } catch (err) {
-                    console.error(err);
-                    await interaction.editReply({ content: '❌ حدث خطأ أثناء محاولة تشغيل الرابط.' });
                 }
-            } else {
-                // show catalog buttons
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[0].id).setLabel(SONG_CATALOG[0].title).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[1].id).setLabel(SONG_CATALOG[1].title).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(SONG_CATALOG[2].id).setLabel(SONG_CATALOG[2].title).setStyle(ButtonStyle.Primary)
-                );
-                const embed = new EmbedBuilder()
-                    .setTitle('📜 كتالوج الأغاني - اختر أغنية للتشغيل')
-                    .setDescription('اضغط على الزر الخاص بالأغنية التي تود تشغيلها في قناتك الصوتية.')
-                    .setColor('#FFD700');
-                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+                await playYouTubeTrack(voiceChannel, query);
+                await interaction.editReply({ content: '▶️ تم تشغيل الأغنية الآن.' });
+            } catch (err) {
+                console.error('❌ Music command failed:', err);
+                await interaction.editReply({ content: '❌ تعذر البحث أو تشغيل الأغنية حالياً. جرّب مرة أخرى أو استخدم رابط يوتيوب مباشر.' });
             }
         }
         else if (commandName === 'stop') {
