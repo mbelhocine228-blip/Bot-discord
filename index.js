@@ -291,6 +291,7 @@ const commands = [
     new SlashCommandBuilder().setName('ai').setDescription('فتح قناة خاصة بك للدردشة مع الذكاء الاصطناعي'),
     new SlashCommandBuilder().setName('private').setDescription('فتح قناة خاصة للدردشة مع الذكاء الاصطناعي'),
     new SlashCommandBuilder().setName('pirvat').setDescription('فتح قناة خاصة للدردشة مع الذكاء الاصطناعي'),
+     new SlashCommandBuilder().setName('piravte').setDescription('فتح قناة خاصة للدردشة مع الذكاء الاصطناعي'),
     new SlashCommandBuilder().setName('ai-reset').setDescription('مسح ذاكرة المحادثة الحالية مع الذكاء الاصطناعي فهاد القناة'),
     // --------------------
 ].map(cmd => cmd.toJSON());
@@ -1707,7 +1708,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         // ---------------- AI command handler ----------------
-        else if (commandName === 'ai' || commandName === 'private' || commandName === 'pirvat') {
+        else if (commandName === 'ai' || commandName === 'private' || commandName === 'pirvat' || commandName === 'piravte') {
             await interaction.deferReply({ ephemeral: true });
 
             const existingChannelId = aiChannels.get(user.id);
