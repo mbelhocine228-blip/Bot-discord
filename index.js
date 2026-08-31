@@ -152,6 +152,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1171579175635800175';
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID?.trim();
 
 passport.use(new DiscordStrategy({
     clientID: DISCORD_CLIENT_ID,
@@ -308,8 +309,13 @@ client.once('ready', async () => {
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
         const rest = new REST({ version: '10' }).setToken(discordToken);
-        await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: commands });
-        console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
+        const commandRoute = DISCORD_GUILD_ID
+            ? Routes.applicationGuildCommands(DISCORD_CLIENT_ID, DISCORD_GUILD_ID)
+            : Routes.applicationCommands(DISCORD_CLIENT_ID);
+        await rest.put(commandRoute, { body: commands });
+        console.log(DISCORD_GUILD_ID
+            ? '🔄 تم تسجيل الأوامر فورياً داخل السيرفر المحدد.'
+            : '🔄 تم تسجيل الأوامر العامة؛ قد يحتاج ظهورها لبعض الوقت.');
     } catch (error) { console.error(error); }
 
     setInterval(() => {
