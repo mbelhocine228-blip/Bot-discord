@@ -20,6 +20,9 @@ const client = new Client({
     ] 
 });
 
+let discordReady = false;
+let discordLoginError = null;
+
 const guildSettings = new Map();
 const serverFeatures = new Map();
 const guildClubTimers = new Map();
@@ -141,7 +144,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'change-me-please', 
     resave: false, 
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true, sameSite: 'lax' }
+    cookie: { secure: 'auto', httpOnly: true, sameSite: 'lax' }
 }));
 
 app.use(passport.initialize());
@@ -161,7 +164,20 @@ passport.use(new DiscordStrategy({
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
-app.get('/login', passport.authenticate('discord'));
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        discord: discordReady && client.isReady() ? 'ready' : 'offline',
+        error: discordLoginError
+    });
+});
+
+app.get('/login', (req, res, next) => {
+    if (!process.env.DISCORD_CLIENT_SECRET) {
+        return res.status(503).send('Discord OAuth is not configured. Add DISCORD_CLIENT_SECRET in Render.');
+    }
+    return passport.authenticate('discord')(req, res, next);
+});
 app.get('/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
 app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
@@ -274,10 +290,22 @@ const commands = [
     // --------------------
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+client.on('error', error => {
+    discordLoginError = error?.message || String(error);
+    console.error('❌ Discord client error:', discordLoginError);
+});
+
+client.on('shardError', error => {
+    discordLoginError = error?.message || String(error);
+    console.error('❌ Discord shard error:', discordLoginError);
+});
+
 client.once('ready', async () => {
+    discordReady = true;
+    discordLoginError = null;
     console.log(`✅ البوت يعمل بنجاح تام كـ: ${client.user.tag}`);
     try {
+        const rest = new REST({ version: '10' }).setToken(discordToken);
         await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: commands });
         console.log('🔄 تم تسجيل جميع الأوامر ونظام الحماية والسبام بنجاح.');
     } catch (error) { console.error(error); }
@@ -1663,9 +1691,9 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-if (!process.env.DISCORD_TOKEN) {
-    console.error('❌ متغير البيئة DISCORD_TOKEN غير موجود. أضفه فإعدادات Render (Environment) وأعد التشغيل.');
-    process.exit(1);
+const discordToken = process.env.DISCORD_TOKEN?.trim();
+if (!discordToken) {
+    console.error('❌ متغير البيئة DISCORD_TOKEN غير موجود. أضفه فإعدادات Render (Environment).');
 }
 if (!process.env.DISCORD_CLIENT_SECRET) {
     console.warn('⚠️ متغير البيئة DISCORD_CLIENT_SECRET غير موجود — تسجيل الدخول عبر لوحة التحكم (OAuth2) لن يعمل.');
@@ -1674,9 +1702,19 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('⚠️ متغير البيئة GEMINI_API_KEY غير موجود — أمر /ai لن يعمل حتى تضيفه.');
 }
 
-client.login(process.env.DISCORD_TOKEN);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const PORT = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 مركز قيادة ROCKS يعمل على المنفذ ${PORT}`);
 });
+server.on('error', error => {
+    console.error('❌ تعذر تشغيل خادم الويب:', error);
+});
+
+if (discordToken) {
+    client.login(discordToken)
+        .then(() => console.log('✅ تم الاتصال بـ Discord بنجاح.'))
+        .catch(error => {
+            discordLoginError = error?.message || String(error);
+            console.error('❌ فشل تسجيل الدخول إلى Discord:', discordLoginError);
+        });
+}
