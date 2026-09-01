@@ -218,6 +218,12 @@ const botCommandsList = [
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
     { name: 'play', desc: 'البحث عن أغنية من YouTube وتشغيلها في القناة الصوتية' },
+    { name: 'pause', desc: 'إيقاف الأغنية مؤقتاً' },
+    { name: 'resume', desc: 'استئناف الأغنية' },
+    { name: 'nowplaying', desc: 'عرض لوحة الأغنية الحالية' },
+    { name: 'shuffle', desc: 'خلط قائمة التشغيل' },
+    { name: 'loop', desc: 'تفعيل تكرار الأغنية أو القائمة' },
+    { name: 'volume', desc: 'رفع أو خفض صوت المشغل' },
     { name: 'queue', desc: 'عرض قائمة الأغاني الحالية' },
     { name: 'skip', desc: 'تخطي الأغنية الحالية وتشغيل التالية' },
     { name: 'stop', desc: 'إيقاف تشغيل الموسيقى' },
@@ -283,6 +289,12 @@ const commands = [
         .addStringOption(opt => opt.setName('duration').setDescription('الوقت المتبقي بصيغة ساعات:دقائق:ثواني (مثال: 0:02:00)').setRequired(true)),
     // ---- Music commands ----
     new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
+    new SlashCommandBuilder().setName('pause').setDescription('إيقاف الأغنية مؤقتاً'),
+    new SlashCommandBuilder().setName('resume').setDescription('استئناف الأغنية'),
+    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض لوحة الأغنية الحالية'),
+    new SlashCommandBuilder().setName('shuffle').setDescription('خلط قائمة التشغيل'),
+    new SlashCommandBuilder().setName('loop').setDescription('تغيير وضع التكرار').addStringOption(opt => opt.setName('mode').setDescription('off أو track أو queue').setRequired(false).addChoices({ name: 'إيقاف', value: 'off' }, { name: 'الأغنية', value: 'track' }, { name: 'القائمة', value: 'queue' })),
+    new SlashCommandBuilder().setName('volume').setDescription('تغيير مستوى الصوت').addIntegerOption(opt => opt.setName('percent').setDescription('من 0 إلى 100').setMinValue(0).setMaxValue(100).setRequired(true)),
     new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
     new SlashCommandBuilder().setName('skip').setDescription('تخطي الأغنية الحالية وتشغيل التالية'),
     new SlashCommandBuilder().setName('queue').setDescription('عرض قائمة الأغاني الحالية'),
@@ -1312,7 +1324,9 @@ async function startNextTrack(guildId) {
         const current = voicePlayers.get(guildId);
         if (!current || current !== entry) throw new Error('Voice player was closed while loading the track');
         entry.stream = audio.stream;
-        entry.player.play(createAudioResource(audio.stream, { inputType: audio.type, inlineVolume: false }));
+        entry.resource = createAudioResource(audio.stream, { inputType: audio.type, inlineVolume: true });
+        if (entry.resource.volume) entry.resource.volume.setVolume(entry.volume);
+        entry.player.play(entry.resource);
         entry.starting = false;
         return true;
     } catch (error) {
@@ -1349,11 +1363,17 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
             selfMute: false
         });
         const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-        entry = { connection, player, voiceChannelId: voiceChannel.id, queue: [], current: null, starting: false, stream: null };
+        entry = { connection, player, voiceChannelId: voiceChannel.id, queue: [], current: null, starting: false, stream: null, resource: null, volume: 1, loopMode: 'off' };
         connection.subscribe(player);
         player.on(AudioPlayerStatus.Idle, () => {
             const current = voicePlayers.get(guildId);
             if (!current || current.player !== player) return;
+            const finishedTrack = current.current;
+            if (finishedTrack && current.loopMode === 'track') current.queue.unshift(finishedTrack);
+            if (finishedTrack && current.loopMode === 'queue') current.queue.push(finishedTrack);
+            try { current.stream?.destroy(); } catch (error) {}
+            current.stream = null;
+            current.resource = null;
             current.current = null;
             startNextTrack(guildId).catch(error => console.error('❌ Next track failed:', error.message || error));
         });
@@ -1368,13 +1388,83 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
         voicePlayers.set(guildId, entry);
     }
 
-    const track = { url: normalizedUrl, title: metadata.title || 'أغنية من YouTube', requestedBy: metadata.requestedBy || null };
+    const track = { url: normalizedUrl, title: metadata.title || 'أغنية من YouTube', requestedBy: metadata.requestedBy || null, duration: metadata.duration || null, author: metadata.author || null, thumbnail: metadata.thumbnail || null };
     const wasIdle = !entry.current && entry.queue.length === 0;
     entry.queue.push(track);
     if (wasIdle) await startNextTrack(guildId);
     return { track, position: entry.queue.length + (entry.current ? 1 : 0), playingNow: wasIdle };
 }
 
+function musicPanelPayload(guildId) {
+    const entry = voicePlayers.get(guildId);
+    if (!entry || !entry.current) {
+        return { content: '📭 لا توجد أغنية قيد التشغيل حالياً.', embeds: [], components: [] };
+    }
+    const track = entry.current;
+    const loopLabel = entry.loopMode === 'track' ? 'الأغنية الحالية' : entry.loopMode === 'queue' ? 'القائمة' : 'متوقف';
+    const queueText = entry.queue.length
+        ? entry.queue.slice(0, 10).map((item, index) => (index + 1) + '. ' + escapeHtml(item.title)).join(String.fromCharCode(10))
+        : 'القائمة فارغة';
+    const paused = entry.player.state.status === AudioPlayerStatus.Paused;
+    const embed = new EmbedBuilder()
+        .setTitle('🎵 MUSIC PANEL')
+        .setDescription('**' + escapeHtml(track.title) + '**')
+        .setColor('#5865F2')
+        .addFields(
+            { name: '👤 Requested By', value: track.requestedBy ? '<@' + track.requestedBy + '>' : '—', inline: true },
+            { name: '⏱️ Duration', value: track.duration || '—', inline: true },
+            { name: '🎤 Author', value: escapeHtml(track.author || 'YouTube'), inline: true },
+            { name: '🔊 Volume', value: Math.round((entry.volume || 0) * 100) + '%', inline: true },
+            { name: '🔁 Loop', value: loopLabel, inline: true },
+            { name: '📜 Queue', value: queueText, inline: false }
+        )
+        .setTimestamp();
+    if (track.thumbnail) embed.setThumbnail(track.thumbnail);
+    const rowOne = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_panel_volume_down').setLabel('🔉 Down').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_panel_volume_up').setLabel('🔊 Up').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_panel_pause').setLabel(paused ? '▶️ Resume' : '⏸️ Pause').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_panel_skip').setLabel('⏭️ Skip').setStyle(ButtonStyle.Primary)
+    );
+    const rowTwo = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_panel_shuffle').setLabel('🔀 Shuffle').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_panel_loop').setLabel('🔁 Loop: ' + loopLabel).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_panel_queue').setLabel('📜 Queue').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_panel_stop').setLabel('⏹️ Stop').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('music_panel_leave').setLabel('👋 Leave').setStyle(ButtonStyle.Danger)
+    );
+    return { embeds: [embed], components: [rowOne, rowTwo] };
+}
+
+async function handleMusicPanelButton(interaction) {
+    const entry = voicePlayers.get(interaction.guild.id);
+    if (!entry) return interaction.update({ content: '📭 لا توجد أغنية قيد التشغيل حالياً.', embeds: [], components: [] });
+    const action = interaction.customId.replace('music_panel_', '');
+    if (action === 'pause') {
+        if (entry.player.state.status === AudioPlayerStatus.Paused) entry.player.unpause();
+        else entry.player.pause(false);
+    } else if (action === 'skip') {
+        entry.current = null;
+        entry.player.stop(true);
+    } else if (action === 'shuffle') {
+        for (let i = entry.queue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [entry.queue[i], entry.queue[j]] = [entry.queue[j], entry.queue[i]];
+        }
+    } else if (action === 'loop') {
+        entry.loopMode = entry.loopMode === 'off' ? 'track' : entry.loopMode === 'track' ? 'queue' : 'off';
+    } else if (action === 'volume_down' || action === 'volume_up') {
+        const delta = action === 'volume_up' ? 0.1 : -0.1;
+        entry.volume = Math.max(0, Math.min(1, Number((entry.volume + delta).toFixed(2))));
+        if (entry.resource?.volume) entry.resource.volume.setVolume(entry.volume);
+    } else if (action === 'stop' || action === 'leave') {
+        destroyVoicePlayer(interaction.guild.id);
+    } else if (action === 'queue') {
+        return interaction.update(musicPanelPayload(interaction.guild.id));
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return interaction.update(musicPanelPayload(interaction.guild.id));
+}
 const SONG_CATALOG = [
     { id: 'song_1', title: 'Sample Song 1', url: 'https://www.youtube.com/watch?v=DWcJFNfaw9c' },
     { id: 'song_2', title: 'Sample Song 2', url: 'https://www.youtube.com/watch?v=3JZ4pnN3DGs' },
@@ -1422,6 +1512,11 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
+        if (interaction.customId && interaction.customId.startsWith('music_panel_')) {
+            try { await handleMusicPanelButton(interaction); }
+            catch (error) { console.error('❌ Music panel action failed:', error); await interaction.reply({ content: '❌ تعذر تنفيذ زر الموسيقى.', ephemeral: true }).catch(() => {}); }
+            return;
+        }
         // Song selection buttons (customId like song_song_1)
         if (interaction.customId && interaction.customId.startsWith('music_search_')) {
             const parts = interaction.customId.split('_');
@@ -1952,18 +2047,22 @@ client.on('interactionCreate', async interaction => {
             const voiceChannel = member.voice.channel;
             if (!voiceChannel) return interaction.reply({ content: '❌ لازم تكون داخل قناة صوتية أولاً.', ephemeral: true });
             if (!query) return interaction.reply({ content: '❌ اكتب اسم الأغنية أو رابط يوتيوب.', ephemeral: true });
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply();
             try {
                 if (!isYouTubeUrl(query)) {
                     const searchResult = await ytSearch(query);
                     const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
                     if (!firstVideo) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم. جرّب اسمًا أوضح.' });
                     const resultUrl = 'https://www.youtube.com/watch?v=' + firstVideo.videoId;
-                    const queued = await playYouTubeTrack(voiceChannel, resultUrl, { title: firstVideo.title });
-                    return interaction.editReply({ content: queued.playingNow ? '▶️ يتم تشغيل **' + firstVideo.title + '** الآن.' : '✅ تمت إضافة **' + firstVideo.title + '** إلى قائمة التشغيل (المركز ' + queued.position + ').' });
+                    const queued = await playYouTubeTrack(voiceChannel, resultUrl, { title: firstVideo.title, duration: firstVideo.duration?.timestamp, author: firstVideo.author?.name, thumbnail: firstVideo.thumbnail });
+                    const panel = musicPanelPayload(guild.id);
+                    panel.content = queued.playingNow ? '▶️ يتم تشغيل **' + firstVideo.title + '** الآن.' : '✅ تمت إضافة **' + firstVideo.title + '** إلى قائمة التشغيل (المركز ' + queued.position + ').';
+                    return interaction.editReply(panel);
                 }
                 await playYouTubeTrack(voiceChannel, query);
-                await interaction.editReply({ content: '▶️ تم تشغيل الأغنية الآن.' });
+                const panel = musicPanelPayload(guild.id);
+                panel.content = '▶️ تم تشغيل الأغنية الآن.';
+                await interaction.editReply(panel);
             } catch (err) {
                 console.error('❌ Music command failed:', err);
                 await interaction.editReply({ content: '❌ تعذر البحث أو تشغيل الأغنية حالياً. جرّب مرة أخرى أو استخدم رابط يوتيوب مباشر.' });
