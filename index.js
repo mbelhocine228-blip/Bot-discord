@@ -4,9 +4,10 @@ const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
 const play = require('play-dl');
 const ytSearch = require('yt-search');
+const { Readable } = require('stream');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -31,6 +32,7 @@ const serverConfigs = new Map();
 
 // Voice players per guild
 const voicePlayers = new Map(); // guildId -> { connection, player }
+let youtubeClientPromise = null;
 
 // ==================== إعدادات ميزة الذكاء الاصطناعي (Gemini) ====================
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
@@ -1244,8 +1246,41 @@ function destroyVoicePlayer(guildId) {
     try { entry.connection.destroy(); } catch (error) {}
 }
 
+async function getYouTubeClient() {
+    if (!youtubeClientPromise) {
+        youtubeClientPromise = import('youtubei.js').then(({ Innertube }) =>
+            Innertube.create({ lang: 'en', location: 'US' })
+        );
+    }
+    try {
+        return await youtubeClientPromise;
+    } catch (error) {
+        youtubeClientPromise = null;
+        throw error;
+    }
+}
+
 async function createYouTubeStream(url) {
+    const videoId = new URL(url).searchParams.get('v');
     let lastError;
+
+    try {
+        const youtube = await getYouTubeClient();
+        const webStream = await youtube.download(videoId, {
+            type: 'audio',
+            quality: 'best',
+            format: 'webm',
+            codec: 'opus'
+        });
+        const stream = typeof webStream?.getReader === 'function'
+            ? Readable.fromWeb(webStream)
+            : webStream;
+        return { stream, type: StreamType.WebmOpus };
+    } catch (error) {
+        lastError = error;
+        console.warn('⚠️ Modern YouTube stream failed; trying fallback:', error.message || error);
+    }
+
     for (const options of [
         { quality: 2, discordPlayerCompatibility: true },
         { quality: 1, discordPlayerCompatibility: true }
@@ -1254,7 +1289,7 @@ async function createYouTubeStream(url) {
             return await play.stream(url, options);
         } catch (error) {
             lastError = error;
-            console.warn('⚠️ YouTube stream attempt failed:', error.message || error);
+            console.warn('⚠️ YouTube fallback stream failed:', error.message || error);
         }
     }
     throw lastError || new Error('Unable to create a YouTube stream');
