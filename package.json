@@ -18,6 +18,7 @@
     "express-session": "^1.18.1",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
-    "play-dl": "^1.9.7"
+    "play-dl": "^1.9.7",
+    "youtubei.js": "^18.0.0"
   }
 }
