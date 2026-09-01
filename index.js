@@ -277,6 +277,8 @@ const commands = [
     // ---- Music commands ----
     new SlashCommandBuilder().setName('play').setDescription('البحث عن أغنية وتشغيلها في القناة الصوتية').addStringOption(opt => opt.setName('query').setDescription('اسم الأغنية أو رابط يوتيوب').setRequired(true)),
     new SlashCommandBuilder().setName('stop').setDescription('إيقاف التشغيل حالياً داخل القناة الصوتية'),
+    new SlashCommandBuilder().setName('skip').setDescription('تخطي الأغنية الحالية وتشغيل التالية'),
+    new SlashCommandBuilder().setName('queue').setDescription('عرض قائمة الأغاني الحالية'),
     new SlashCommandBuilder().setName('leave').setDescription('خروج البوت من القناة الصوتية'),
     // -------------------------
     new SlashCommandBuilder().setName('rps').setDescription('لعبة حجر ورقة مقص ضد البوت').addStringOption(opt => opt.setName('choice').setDescription('اختر: حجر، ورقة، مقص').setRequired(true)),
@@ -1100,15 +1102,27 @@ app.get('/control/:guildId/:section', (req, res) => {
 });
 
 // ----------------- Songs catalog (يمكن تعديل القائمة هنا) -----------------
-function isYouTubeUrl(value) {
+function normalizeYouTubeUrl(value) {
     try {
-        const parsed = new URL(String(value));
+        const parsed = new URL(String(value).trim());
         const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
-        return ['youtube.com', 'youtu.be', 'music.youtube.com', 'm.youtube.com'].includes(host)
-            && (host === 'youtu.be' || parsed.searchParams.has('v'));
+        if (!['youtube.com', 'youtu.be', 'music.youtube.com', 'm.youtube.com'].includes(host)) return null;
+
+        let videoId = parsed.searchParams.get('v');
+        if (!videoId && host === 'youtu.be') videoId = parsed.pathname.split('/').filter(Boolean)[0];
+        if (!videoId) {
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            if (['shorts', 'embed', 'live'].includes(parts[0])) videoId = parts[1];
+        }
+        if (!videoId || !/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) return null;
+        return 'https://www.youtube.com/watch?v=' + videoId;
     } catch (error) {
-        return false;
+        return null;
     }
+}
+
+function isYouTubeUrl(value) {
+    return Boolean(normalizeYouTubeUrl(value));
 }
 
 function destroyVoicePlayer(guildId) {
@@ -1116,7 +1130,24 @@ function destroyVoicePlayer(guildId) {
     if (!entry) return;
     voicePlayers.delete(guildId);
     try { entry.player.stop(true); } catch (error) {}
+    try { entry.stream?.destroy(); } catch (error) {}
     try { entry.connection.destroy(); } catch (error) {}
+}
+
+async function createYouTubeStream(url) {
+    let lastError;
+    for (const options of [
+        { quality: 2, discordPlayerCompatibility: true },
+        { quality: 1, discordPlayerCompatibility: true }
+    ]) {
+        try {
+            return await play.stream(url, options);
+        } catch (error) {
+            lastError = error;
+            console.warn('⚠️ YouTube stream attempt failed:', error.message || error);
+        }
+    }
+    throw lastError || new Error('Unable to create a YouTube stream');
 }
 
 async function startNextTrack(guildId) {
@@ -1131,16 +1162,21 @@ async function startNextTrack(guildId) {
     entry.starting = true;
     entry.current = track;
     try {
-        const audio = await play.stream(track.url, { quality: 2, discordPlayerCompatibility: true });
         await entersState(entry.connection, VoiceConnectionStatus.Ready, 20000);
+        const audio = await createYouTubeStream(track.url);
+        const current = voicePlayers.get(guildId);
+        if (!current || current !== entry) throw new Error('Voice player was closed while loading the track');
         entry.stream = audio.stream;
-        entry.player.play(createAudioResource(audio.stream, { inputType: audio.type }));
+        entry.player.play(createAudioResource(audio.stream, { inputType: audio.type, inlineVolume: false }));
         entry.starting = false;
         return true;
     } catch (error) {
         console.error('❌ Track stream failed:', track.title, error.message || error);
+        try { entry.stream?.destroy(); } catch (streamError) {}
+        entry.stream = null;
         entry.current = null;
         entry.starting = false;
+        if (voicePlayers.get(guildId) !== entry) throw error;
         if (entry.queue.length) return startNextTrack(guildId);
         destroyVoicePlayer(guildId);
         throw error;
@@ -1148,11 +1184,14 @@ async function startNextTrack(guildId) {
 }
 
 async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
-    if (!isYouTubeUrl(url)) throw new Error('Invalid YouTube URL');
+    const normalizedUrl = normalizeYouTubeUrl(url);
+    if (!normalizedUrl) throw new Error('Invalid YouTube URL');
     const guildId = voiceChannel.guild.id;
     let entry = voicePlayers.get(guildId);
 
-    if (entry && entry.voiceChannelId !== voiceChannel.id) {
+    if (entry && (entry.voiceChannelId !== voiceChannel.id
+        || entry.connection.state.status === VoiceConnectionStatus.Destroyed
+        || entry.connection.state.status === VoiceConnectionStatus.Disconnected)) {
         destroyVoicePlayer(guildId);
         entry = null;
     }
@@ -1184,7 +1223,7 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
         voicePlayers.set(guildId, entry);
     }
 
-    const track = { url, title: metadata.title || 'أغنية من YouTube', requestedBy: metadata.requestedBy || null };
+    const track = { url: normalizedUrl, title: metadata.title || 'أغنية من YouTube', requestedBy: metadata.requestedBy || null };
     const wasIdle = !entry.current && entry.queue.length === 0;
     entry.queue.push(track);
     if (wasIdle) await startNextTrack(guildId);
