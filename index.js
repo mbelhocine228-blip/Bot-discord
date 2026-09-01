@@ -2068,6 +2068,26 @@ client.on('interactionCreate', async interaction => {
                 await interaction.editReply({ content: '❌ تعذر البحث أو تشغيل الأغنية حالياً. جرّب مرة أخرى أو استخدم رابط يوتيوب مباشر.' });
             }
         }
+        else if (['pause', 'resume', 'nowplaying', 'shuffle', 'loop', 'volume'].includes(commandName)) {
+            const entry = voicePlayers.get(guild.id);
+            if (!entry || !entry.current) return interaction.reply({ content: '📭 لا توجد أغنية قيد التشغيل حالياً.', ephemeral: true });
+            if (commandName === 'pause') entry.player.pause(false);
+            else if (commandName === 'resume') entry.player.unpause();
+            else if (commandName === 'shuffle') {
+                for (let i = entry.queue.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [entry.queue[i], entry.queue[j]] = [entry.queue[j], entry.queue[i]];
+                }
+            } else if (commandName === 'loop') {
+                const requestedMode = options.getString('mode');
+                entry.loopMode = requestedMode || (entry.loopMode === 'off' ? 'track' : entry.loopMode === 'track' ? 'queue' : 'off');
+            } else if (commandName === 'volume') {
+                entry.volume = options.getInteger('percent') / 100;
+                if (entry.resource?.volume) entry.resource.volume.setVolume(entry.volume);
+            }
+            if (commandName === 'nowplaying') return interaction.reply(musicPanelPayload(guild.id));
+            await interaction.reply({ content: '✅ تم تنفيذ أمر الموسيقى.', ephemeral: true });
+        }
         else if (commandName === 'queue') {
             const entry = voicePlayers.get(guild.id);
             if (!entry || (!entry.current && !entry.queue.length)) return interaction.reply({ content: '📭 قائمة التشغيل فارغة.', ephemeral: true });
