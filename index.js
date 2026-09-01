@@ -601,6 +601,10 @@ app.post('/control/:guildId/advanced-save', (req, res) => {
     res.redirect(`/control/${guildId}/settings?saved=true`);
 });
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>\"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[character]));
+}
+
 app.post('/control/:guildId/music/play', async (req, res) => {
     if (!req.isAuthenticated()) return res.redirect('/login');
     const guildId = req.params.guildId;
