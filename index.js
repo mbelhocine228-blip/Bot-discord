@@ -215,6 +215,11 @@ const botCommandsList = [
     { name: 'setclubtimer', desc: 'تحديث أوقات مهام الكلان في النظام بصمت (Endurance & Duel)' },
     { name: 'eventsched', desc: 'جدولة سباق أو فعالية جديدة' },
     { name: 'event', desc: 'إنشاء مسابقة أو فعالية مع عد تنازلي حي للوقت المتبقي' },
+    { name: 'play', desc: 'البحث عن أغنية من YouTube وتشغيلها في القناة الصوتية' },
+    { name: 'queue', desc: 'عرض قائمة الأغاني الحالية' },
+    { name: 'skip', desc: 'تخطي الأغنية الحالية وتشغيل التالية' },
+    { name: 'stop', desc: 'إيقاف تشغيل الموسيقى' },
+    { name: 'leave', desc: 'إخراج البوت من القناة الصوتية' },
     { name: 'rps', desc: 'لعبة حجر ورقة مقص ضد البوت' },
     { name: 'hug', desc: 'إرسال حضن ودي لعضو' },
     { name: 'slap', desc: 'إعطاء كف مزحي لعضو' },
@@ -596,6 +601,56 @@ app.post('/control/:guildId/advanced-save', (req, res) => {
     res.redirect(`/control/${guildId}/settings?saved=true`);
 });
 
+app.post('/control/:guildId/music/play', async (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/login');
+    const guildId = req.params.guildId;
+    const guild = client.guilds.cache.get(guildId);
+    const voiceChannel = guild?.channels.cache.get(req.body.voiceChannelId);
+    const query = String(req.body.query || '').trim();
+    if (!guild || !voiceChannel || voiceChannel.type !== ChannelType.GuildVoice || !query) {
+        return res.redirect('/control/' + guildId + '/music?saved=invalid');
+    }
+    try {
+        let url = query;
+        let title = '';
+        if (!isYouTubeUrl(query)) {
+            const searchResult = await ytSearch(query);
+            const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
+            if (!firstVideo) return res.redirect('/control/' + guildId + '/music?saved=not-found');
+            url = 'https://www.youtube.com/watch?v=' + firstVideo.videoId;
+            title = firstVideo.title;
+        }
+        const queued = await playYouTubeTrack(voiceChannel, url, { title, requestedBy: req.user?.id });
+        return res.redirect('/control/' + guildId + '/music?saved=' + (queued.playingNow ? 'playing' : 'queued'));
+    } catch (error) {
+        console.error('❌ Dashboard music play failed:', error.message || error);
+        return res.redirect('/control/' + guildId + '/music?saved=error');
+    }
+});
+
+app.post('/control/:guildId/music/skip', (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/login');
+    const guildId = req.params.guildId;
+    const entry = voicePlayers.get(guildId);
+    if (entry) {
+        entry.current = null;
+        entry.player.stop(true);
+    }
+    return res.redirect('/control/' + guildId + '/music?saved=skipped');
+});
+
+app.post('/control/:guildId/music/stop', (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/login');
+    destroyVoicePlayer(req.params.guildId);
+    return res.redirect('/control/' + req.params.guildId + '/music?saved=stopped');
+});
+
+app.post('/control/:guildId/music/leave', (req, res) => {
+    if (!req.isAuthenticated()) return res.redirect('/login');
+    destroyVoicePlayer(req.params.guildId);
+    return res.redirect('/control/' + req.params.guildId + '/music?saved=left');
+});
+
 const rksThemeStyle = `
     * { box-sizing: border-box; }
     body {
@@ -865,6 +920,56 @@ app.get('/control/:guildId/:section', (req, res) => {
                 </form>
             </div>
         `;
+    } else if (section === 'music') {
+        const entry = voicePlayers.get(guild.id);
+        const voiceChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice);
+        let voiceChannelsList = '';
+        voiceChannels.forEach(c => {
+            voiceChannelsList += '<option value=' + String.fromCharCode(39) + c.id + String.fromCharCode(39) + '>' + escapeHtml(c.name) + '</option>';
+        });
+        const nowPlaying = entry?.current ? escapeHtml(entry.current.title) : 'لا توجد أغنية قيد التشغيل';
+        const queueHtml = entry?.queue?.length
+            ? entry.queue.slice(0, 20).map((track, index) => '<div class=' + String.fromCharCode(39) + 'command-card' + String.fromCharCode(39) + '><span style=' + String.fromCharCode(39) + 'color:#FFD700;' + String.fromCharCode(39) + '>' + (index + 1) + '. ' + escapeHtml(track.title) + '</span></div>').join('')
+            : '<p style=' + String.fromCharCode(39) + 'color:#99aab5;' + String.fromCharCode(39) + '>القائمة فارغة حالياً.</p>';
+        const musicStatus = {
+            playing: '✅ بدأ تشغيل الأغنية داخل القناة الصوتية.',
+            queued: '✅ تمت إضافة الأغنية إلى قائمة التشغيل.',
+            skipped: '⏭️ تم تخطي الأغنية الحالية.',
+            stopped: '⏹️ تم إيقاف التشغيل.',
+            left: '👋 خرج البوت من القناة الصوتية.',
+            'not-found': '❌ لم يتم العثور على نتيجة في YouTube.',
+            invalid: '❌ اختر قناة صوتية واكتب اسم أغنية أو رابط YouTube.',
+            error: '❌ تعذر تشغيل الأغنية. راجع سجلات الخدمة.'
+        }[req.query.saved] || '';
+        sectionContent = `
+            <div style='margin-bottom:20px;'>
+                <h3 style='color:#FFD700; margin-bottom:5px; font-size:20px;'>🎵 مركز تحكم الموسيقى</h3>
+                <p style='color:#b9bbbe; font-size:13px;'>ابحث من YouTube وشغّل الأغنية مباشرة، مع إدارة القائمة من لوحة التحكم.</p>
+            </div>
+            ${musicStatus ? '<div style=' + String.fromCharCode(39) + 'color:#FFD700; font-weight:bold; margin-bottom:12px; font-size:13px;' + String.fromCharCode(39) + '>' + musicStatus + '</div>' : ''}
+            <div class='section-box'>
+                <form action='/control/${guild.id}/music/play' method='POST'>
+                    <label style='font-size:13px; color:#FFD700; font-weight:bold;'>القناة الصوتية</label>
+                    <select name='voiceChannelId' required>${voiceChannelsList}<option value='' disabled>-- اختر قناة صوتية --</option></select>
+                    <label style='font-size:13px; color:#FFD700; font-weight:bold; margin-top:12px;'>اسم الأغنية أو رابط YouTube</label>
+                    <input name='query' required placeholder='مثال: The Weeknd - Blinding Lights أو رابط YouTube'>
+                    <button type='submit' class='btn-gold' style='margin-top:15px; width:100%;'>▶️ بحث وتشغيل</button>
+                </form>
+            </div>
+            <div class='section-box'>
+                <h3 style='color:#FFD700; font-size:16px; margin-top:0;'>الحالة الحالية</h3>
+                <p style='font-size:15px;'>▶️ <strong>${nowPlaying}</strong></p>
+                <div style='display:flex; gap:10px; flex-wrap:wrap;'>
+                    <form action='/control/${guild.id}/music/skip' method='POST'><button class='btn-gold' type='submit'>⏭️ Skip</button></form>
+                    <form action='/control/${guild.id}/music/stop' method='POST'><button class='btn-gold' type='submit'>⏹️ Stop</button></form>
+                    <form action='/control/${guild.id}/music/leave' method='POST'><button class='btn-gold' type='submit'>👋 Leave</button></form>
+                </div>
+            </div>
+            <div class='section-box'>
+                <h3 style='color:#FFD700; font-size:16px; margin-top:0;'>قائمة التشغيل (${entry?.queue?.length || 0})</h3>
+                ${queueHtml}
+            </div>
+        `;
     } else if (section === 'libcommands') {
         let commandsCardsHtml = '';
         botCommandsList.forEach(cmd => {
@@ -1069,6 +1174,7 @@ app.get('/control/:guildId/:section', (req, res) => {
                 
                 <div class="nav-group"><a href="/control/${guild.id}/stats" class="nav-item ${section === 'stats' ? 'active' : ''}"><span>📊 نظرة عامة</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/commands" class="nav-item ${section === 'commands' ? 'active' : ''}"><span>⚙️ Commands & Automod</span><span class="badge-new" style="background:#23a55a; color:white;">حماية</span></a></div>
+                <div class="nav-group"><a href="/control/${guild.id}/music" class="nav-item ${section === 'music' ? 'active' : ''}"><span>🎵 Music Control</span><span class="badge-new" style="background:#5865F2; color:white;">YouTube</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/libcommands" class="nav-item ${section === 'libcommands' ? 'active' : ''}"><span>⚡ مكتبة الأوامر</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/racing" class="nav-item ${section === 'racing' ? 'active' : ''}"><span>🏎️ أخبار Racing</span><span class="badge-new">جديد</span></a></div>
                 <div class="nav-group"><a href="/control/${guild.id}/missions" class="nav-item ${section === 'missions' ? 'active' : ''}"><span>🏁 مهام الكلان</span><span class="badge-new" style="background:#FFD700; color:#0b0d14;">كلان</span></a></div>
