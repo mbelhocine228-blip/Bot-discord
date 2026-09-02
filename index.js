@@ -629,16 +629,7 @@ app.post('/control/:guildId/music/play', async (req, res) => {
         return res.redirect('/control/' + guildId + '/music?saved=invalid');
     }
     try {
-        let url = query;
-        let title = '';
-        if (!isYouTubeUrl(query)) {
-            const searchResult = await ytSearch(query);
-            const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
-            if (!firstVideo) return res.redirect('/control/' + guildId + '/music?saved=not-found');
-            url = 'https://www.youtube.com/watch?v=' + firstVideo.videoId;
-            title = firstVideo.title;
-        }
-        const queued = await playYouTubeTrack(voiceChannel, url, { title, requestedBy: req.user?.id });
+        const queued = await enqueueMusicQuery(voiceChannel, query, req.user?.id);
         return res.redirect('/control/' + guildId + '/music?saved=' + (queued.playingNow ? 'playing' : 'queued'));
     } catch (error) {
         console.error('❌ Dashboard music play failed:', error.message || error);
@@ -1245,6 +1236,71 @@ function normalizeYouTubeUrl(value) {
     }
 }
 
+function normalizeSoundCloudUrl(value) {
+    try {
+        const parsed = new URL(String(value).trim());
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        if (!['soundcloud.com', 'on.soundcloud.com'].includes(host)) return null;
+        return parsed.href;
+    } catch (error) {
+        return null;
+    }
+}
+
+function normalizeMusicUrl(value) {
+    return normalizeYouTubeUrl(value) || normalizeSoundCloudUrl(value);
+}
+
+async function resolveMusicCandidates(query) {
+    const directUrl = normalizeMusicUrl(query);
+    if (directUrl) return [{ url: directUrl, title: '', source: normalizeSoundCloudUrl(query) ? 'soundcloud' : 'youtube' }];
+    const candidates = [];
+    try {
+        const searchResult = await ytSearch(query);
+        const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
+        if (firstVideo) candidates.push({
+            url: 'https://www.youtube.com/watch?v=' + firstVideo.videoId,
+            title: firstVideo.title,
+            source: 'youtube',
+            duration: firstVideo.duration?.timestamp || null,
+            author: firstVideo.author?.name || null,
+            thumbnail: firstVideo.thumbnail || null
+        });
+    } catch (error) {
+        console.warn('⚠️ YouTube search failed; trying SoundCloud:', error.message || error);
+    }
+    try {
+        const soundCloudResults = await play.search(query, { limit: 3, source: { soundcloud: 'tracks' } });
+        const tracks = Array.isArray(soundCloudResults) ? soundCloudResults : [];
+        tracks.filter(track => track?.url).slice(0, 3).forEach(track => candidates.push({
+            url: track.url,
+            title: track.name || track.title || 'SoundCloud track',
+            source: 'soundcloud',
+            duration: track.durationRaw || null,
+            author: track.user?.name || track.author?.name || null,
+            thumbnail: track.thumbnail || track.artwork_url || null
+        }));
+    } catch (error) {
+        console.warn('⚠️ SoundCloud search failed:', error.message || error);
+    }
+    if (!candidates.length) throw new Error('No YouTube or SoundCloud result found');
+    return candidates;
+}
+
+async function enqueueMusicQuery(voiceChannel, query, requestedBy = null) {
+    const candidates = await resolveMusicCandidates(query);
+    let lastError;
+    for (const candidate of candidates) {
+        try {
+            const queued = await playYouTubeTrack(voiceChannel, candidate.url, { ...candidate, requestedBy });
+            return { ...queued, candidate };
+        } catch (error) {
+            lastError = error;
+            console.warn('⚠️ Music source failed:', candidate.source, error.message || error);
+        }
+    }
+    throw lastError || new Error('Unable to play any music source');
+}
 function isYouTubeUrl(value) {
     return Boolean(normalizeYouTubeUrl(value));
 }
@@ -1320,7 +1376,9 @@ async function startNextTrack(guildId) {
     entry.current = track;
     try {
         await entersState(entry.connection, VoiceConnectionStatus.Ready, 20000);
-        const audio = await createYouTubeStream(track.url);
+        const audio = track.source === 'soundcloud' || normalizeSoundCloudUrl(track.url)
+            ? await play.stream(track.url)
+            : await createYouTubeStream(track.url);
         const current = voicePlayers.get(guildId);
         if (!current || current !== entry) throw new Error('Voice player was closed while loading the track');
         entry.stream = audio.stream;
@@ -1343,8 +1401,8 @@ async function startNextTrack(guildId) {
 }
 
 async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
-    const normalizedUrl = normalizeYouTubeUrl(url);
-    if (!normalizedUrl) throw new Error('Invalid YouTube URL');
+    const normalizedUrl = normalizeMusicUrl(url);
+    if (!normalizedUrl) throw new Error('Invalid music URL');
     const guildId = voiceChannel.guild.id;
     let entry = voicePlayers.get(guildId);
 
@@ -1388,7 +1446,7 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
         voicePlayers.set(guildId, entry);
     }
 
-    const track = { url: normalizedUrl, title: metadata.title || 'أغنية من YouTube', requestedBy: metadata.requestedBy || null, duration: metadata.duration || null, author: metadata.author || null, thumbnail: metadata.thumbnail || null };
+    const track = { url: normalizedUrl, title: metadata.title || 'أغنية من YouTube', source: metadata.source || (normalizeSoundCloudUrl(normalizedUrl) ? 'soundcloud' : 'youtube'), requestedBy: metadata.requestedBy || null, duration: metadata.duration || null, author: metadata.author || null, thumbnail: metadata.thumbnail || null };
     const wasIdle = !entry.current && entry.queue.length === 0;
     entry.queue.push(track);
     if (wasIdle) await startNextTrack(guildId);
@@ -2049,19 +2107,9 @@ client.on('interactionCreate', async interaction => {
             if (!query) return interaction.reply({ content: '❌ اكتب اسم الأغنية أو رابط يوتيوب.', ephemeral: true });
             await interaction.deferReply();
             try {
-                if (!isYouTubeUrl(query)) {
-                    const searchResult = await ytSearch(query);
-                    const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
-                    if (!firstVideo) return interaction.editReply({ content: '❌ لم أجد أغنية بهذا الاسم. جرّب اسمًا أوضح.' });
-                    const resultUrl = 'https://www.youtube.com/watch?v=' + firstVideo.videoId;
-                    const queued = await playYouTubeTrack(voiceChannel, resultUrl, { title: firstVideo.title, duration: firstVideo.duration?.timestamp, author: firstVideo.author?.name, thumbnail: firstVideo.thumbnail });
-                    const panel = musicPanelPayload(guild.id);
-                    panel.content = queued.playingNow ? '▶️ يتم تشغيل **' + firstVideo.title + '** الآن.' : '✅ تمت إضافة **' + firstVideo.title + '** إلى قائمة التشغيل (المركز ' + queued.position + ').';
-                    return interaction.editReply(panel);
-                }
-                await playYouTubeTrack(voiceChannel, query);
+                const queued = await enqueueMusicQuery(voiceChannel, query, interaction.user.id);
                 const panel = musicPanelPayload(guild.id);
-                panel.content = '▶️ تم تشغيل الأغنية الآن.';
+                panel.content = queued.playingNow ? '▶️ يتم تشغيل **' + (queued.candidate.title || 'الأغنية') + '** الآن.' : '✅ تمت إضافة **' + (queued.candidate.title || 'الأغنية') + '** إلى قائمة التشغيل (المركز ' + queued.position + ').';
                 await interaction.editReply(panel);
             } catch (err) {
                 console.error('❌ Music command failed:', err);
