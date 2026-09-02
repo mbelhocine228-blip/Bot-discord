@@ -10,6 +10,7 @@ const ytSearch = require('yt-search');
 const { Readable } = require('stream');
 const { spawn } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
+const youtubedl = require('youtube-dl-exec');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -1278,6 +1279,26 @@ async function resolveMusicCandidates(query) {
     if (directUrl) return [{ url: directUrl, title: '', source: normalizeSoundCloudUrl(query) ? 'soundcloud' : 'youtube' }];
     const candidates = [];
     try {
+        const ytDlpResult = await youtubedl('ytsearch3:' + query, {
+            dumpSingleJson: true,
+            flatPlaylist: true,
+            skipDownload: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            quiet: true
+        });
+        const entries = Array.isArray(ytDlpResult?.entries) ? ytDlpResult.entries : [];
+        entries.filter(video => video?.id && video?.title).slice(0, 3).forEach(video => candidates.push({
+            url: 'https://www.youtube.com/watch?v=' + video.id,
+            title: video.title,
+            source: 'yt-dlp',
+            duration: video.duration ? formatDurationSeconds(video.duration) : null,
+            author: video.uploader || video.channel || null,
+            thumbnail: video.thumbnail || null
+        }));
+    } catch (error) {
+        console.warn('⚠️ yt-dlp search failed; trying legacy YouTube search:', error.message || error);
+    }    try {
         const searchResult = await ytSearch(query);
         const firstVideo = (searchResult.videos || []).find(video => video.videoId && video.title);
         if (firstVideo) candidates.push({
@@ -1340,6 +1361,7 @@ function destroyVoicePlayer(guildId) {
     try { entry.stream?.destroy(); } catch (error) {}
     try { entry.sourceStream?.destroy(); } catch (error) {}
     try { entry.transcoder?.kill('SIGKILL'); } catch (error) {}
+    try { entry.sourceProcess?.kill('SIGKILL'); } catch (error) {}
     try { entry.connection.destroy(); } catch (error) {}
 }
 
@@ -1392,6 +1414,26 @@ async function createYouTubeStream(url) {
     throw lastError || new Error('Unable to create a YouTube stream');
 }
 
+async function createYtDlpStream(url) {
+    const downloader = youtubedl.exec(url, {
+        format: 'bestaudio/best',
+        output: '-',
+        noPlaylist: true,
+        quiet: true,
+        noWarnings: true,
+        noCheckCertificates: true
+    });
+    if (!downloader.stdout) throw new Error('yt-dlp did not return an audio stream');
+    const transcoder = spawn(ffmpegPath || 'ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+        '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    downloader.stderr?.on('data', data => console.warn('⚠️ yt-dlp:', String(data).trim()));
+    downloader.stdout.on('error', error => transcoder.stdin.destroy(error));
+    transcoder.stderr.on('data', data => console.warn('⚠️ yt-dlp FFmpeg:', String(data).trim()));
+    downloader.stdout.pipe(transcoder.stdin);
+    return { stream: transcoder.stdout, type: StreamType.Raw, sourceStream: downloader.stdout, process: transcoder, sourceProcess: downloader };
+}
 async function createAudiusStream(url) {
     const response = await fetch(url, { redirect: 'follow' });
     if (!response.ok || !response.body) throw new Error('Audius stream returned HTTP ' + response.status);
@@ -1420,14 +1462,17 @@ async function startNextTrack(guildId) {
         await entersState(entry.connection, VoiceConnectionStatus.Ready, 20000);
         const audio = track.source === 'audius'
             ? await createAudiusStream(track.url)
-            : track.source === 'soundcloud' || normalizeSoundCloudUrl(track.url)
-                ? await play.stream(track.url)
-                : await createYouTubeStream(track.url);
+            : track.source === 'yt-dlp'
+                ? await createYtDlpStream(track.url)
+                : track.source === 'soundcloud' || normalizeSoundCloudUrl(track.url)
+                    ? await play.stream(track.url)
+                    : await createYouTubeStream(track.url);
         const current = voicePlayers.get(guildId);
         if (!current || current !== entry) throw new Error('Voice player was closed while loading the track');
         entry.stream = audio.stream;
         entry.sourceStream = audio.sourceStream || null;
         entry.transcoder = audio.process || null;
+        entry.sourceProcess = audio.sourceProcess || null;
         entry.resource = createAudioResource(audio.stream, { inputType: audio.type, inlineVolume: true });
         if (entry.resource.volume) entry.resource.volume.setVolume(entry.volume);
         entry.player.play(entry.resource);
@@ -1438,9 +1483,11 @@ async function startNextTrack(guildId) {
         try { entry.stream?.destroy(); } catch (streamError) {}
         try { entry.sourceStream?.destroy(); } catch (streamError) {}
         try { entry.transcoder?.kill('SIGKILL'); } catch (processError) {}
+        try { entry.sourceProcess?.kill('SIGKILL'); } catch (downloaderError) {}
         entry.stream = null;
         entry.sourceStream = null;
         entry.transcoder = null;
+        entry.sourceProcess = null;
         entry.current = null;
         entry.starting = false;
         if (voicePlayers.get(guildId) !== entry) throw error;
@@ -1471,7 +1518,7 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
             selfMute: false
         });
         const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
-        entry = { connection, player, voiceChannelId: voiceChannel.id, queue: [], current: null, starting: false, stream: null, sourceStream: null, transcoder: null, resource: null, volume: 1, loopMode: 'off' };
+        entry = { connection, player, voiceChannelId: voiceChannel.id, queue: [], current: null, starting: false, stream: null, sourceStream: null, transcoder: null, sourceProcess: null, resource: null, volume: 1, loopMode: 'off' };
         connection.subscribe(player);
         player.on(AudioPlayerStatus.Idle, () => {
             const current = voicePlayers.get(guildId);
@@ -1482,7 +1529,9 @@ async function playYouTubeTrack(voiceChannel, url, metadata = {}) {
             try { current.stream?.destroy(); } catch (error) {}
             current.stream = null;
             current.sourceStream = null;
+            try { current.sourceProcess?.kill('SIGKILL'); } catch (processError) {}
             current.transcoder = null;
+            current.sourceProcess = null;
             current.resource = null;
             current.current = null;
             startNextTrack(guildId).catch(error => console.error('❌ Next track failed:', error.message || error));
@@ -2161,7 +2210,11 @@ client.on('interactionCreate', async interaction => {
             try {
                 const queued = await enqueueMusicQuery(voiceChannel, query, interaction.user.id);
                 const panel = musicPanelPayload(guild.id);
-                panel.content = queued.playingNow ? '▶️ يتم تشغيل **' + (queued.candidate.title || 'الأغنية') + '** الآن.' : '✅ تمت إضافة **' + (queued.candidate.title || 'الأغنية') + '** إلى قائمة التشغيل (المركز ' + queued.position + ').';
+                const addedTitle = queued.candidate.title || 'الأغنية';
+                const addedDuration = queued.candidate.duration ? ' (' + queued.candidate.duration + ')' : '';
+                panel.content = queued.playingNow
+                    ? '🎵 **' + addedTitle + '** is now playing.'
+                    : '🎵 **' + addedTitle + '** added to the queue' + addedDuration + ' - at position ' + queued.position + '.';
                 await interaction.editReply(panel);
             } catch (err) {
                 console.error('❌ Music command failed:', err);
