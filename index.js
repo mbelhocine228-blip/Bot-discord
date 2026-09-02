@@ -1436,6 +1436,8 @@ async function startNextTrack(guildId) {
     } catch (error) {
         console.error('❌ Track stream failed:', track.title, error.message || error);
         try { entry.stream?.destroy(); } catch (streamError) {}
+        try { entry.sourceStream?.destroy(); } catch (streamError) {}
+        try { entry.transcoder?.kill('SIGKILL'); } catch (processError) {}
         entry.stream = null;
         entry.sourceStream = null;
         entry.transcoder = null;
