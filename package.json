@@ -19,6 +19,7 @@
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
     "play-dl": "^1.9.7",
-    "youtubei.js": "^18.0.0"
+    "youtubei.js": "^18.0.0",
+    "ffmpeg-static": "^5.2.0"
   }
 }
